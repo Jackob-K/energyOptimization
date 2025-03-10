@@ -1,8 +1,5 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, APIRouter
 from pydantic import BaseModel
-import pandas as pd
-import sqlite3
-import io
 import database
 
 app = FastAPI()
@@ -62,35 +59,3 @@ async def get_settings():
     """Vrací uložené parametry FVE zpět do UI."""
     data = database.get_fve_data()
     return data
-
-REQUIRED_COLUMNS = {"date", "fveProduction", "consumption", "temperatureMax", "temperatureMin"}
-
-@app.post("/import-historical-data/")
-async def import_historical_data(file: UploadFile = File(...)):
-    """Import historických dat ze souboru CSV/XLSX."""
-    try:
-        # 📌 Načtení souboru do pandas DataFrame
-        content = await file.read()
-        file_extension = file.filename.split(".")[-1]
-
-        if file_extension == "csv":
-            df = pd.read_csv(io.StringIO(content.decode("utf-8")))
-        elif file_extension in ["xls", "xlsx"]:
-            df = pd.read_excel(io.BytesIO(content))
-        else:
-            raise HTTPException(status_code=400, detail="Nepodporovaný formát souboru.")
-
-        # 📌 Kontrola názvů sloupců
-        if not REQUIRED_COLUMNS.issubset(set(df.columns)):
-            raise HTTPException(status_code=400, detail=f"Soubor musí obsahovat sloupce: {REQUIRED_COLUMNS}")
-
-        # 📌 Převod DataFrame na seznam tuple hodnot
-        data_to_insert = df[["date", "fveProduction", "consumption", "temperatureMax", "temperatureMin"]].values.tolist()
-
-        # 📌 Uložení do databáze
-        database.save_historical_data(data_to_insert)
-
-        return {"message": "✅ Data byla úspěšně importována!"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"❌ Chyba při zpracování souboru: {str(e)}")
