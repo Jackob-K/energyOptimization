@@ -1,0 +1,1 @@
+#Zde spravujeme příjem dat z MQTT

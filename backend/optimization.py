@@ -1,0 +1,1 @@
+#Zde spravujeme doporučujeme, kdy je nejvýhodnější plánovat vysokou spotřebu
