@@ -1,1 +1,1 @@
-from . import dashboard, settings
+from . import dashboard, settings, datafeed

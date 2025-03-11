@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+import pandas as pd
 
 DB_NAME = "energy_optimization.db"
 
@@ -9,43 +10,48 @@ def get_db():
     return db
 
 def create_database():
-    with closing(get_db()) as db, db:
-        cursor = db.cursor()
-        
-        # ✅ Tabulka pro nastavení FVE (pouze jeden řádek)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                totalPower REAL
-            )
-        """)
-        
-        # ✅ Tabulka pro panely FVE
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fve_panels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                settings_id INTEGER,
-                latitude REAL,
-                longitude REAL,
-                tilt REAL,
-                azimuth REAL,
-                power REAL,
-                FOREIGN KEY (settings_id) REFERENCES settings (id) ON DELETE CASCADE
-            )
-        """)
-        
-        # ✅ Tabulka pro historická data
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS historicalData (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date DATE NOT NULL,
-                hour INTEGER,
-                consumption REAL NOT NULL,
-                fve_generated REAL NOT NULL,
-                temperature_min REAL,
-                temperature_max REAL
-            )
-        """)
+    """Inicializuje databázi a vytvoří tabulky, pokud neexistují."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # ✅ Tabulka pro nastavení
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        totalPower REAL
+    )
+    """)
+
+    # ✅ Tabulka pro FVE panely
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fve_panels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        settings_id INTEGER,
+        latitude REAL,
+        longitude REAL,
+        tilt REAL,
+        azimuth REAL,
+        power REAL,
+        FOREIGN KEY (settings_id) REFERENCES settings (id)
+    )
+    """)
+
+    # ✅ OPRAVENÁ tabulka `historicalData` (přidán sloupec `hour`)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS historicalData (
+        date TEXT,
+        hour INTEGER,  -- Přidán sloupec pro hodinová data
+        fveProduction REAL,
+        consumption REAL,
+        temperatureMax REAL,
+        temperatureMin REAL,
+        PRIMARY KEY (date, hour)  -- Každý záznam má unikátní kombinaci date + hour
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+    print("✅ Tabulky byly úspěšně vytvořeny nebo aktualizovány.")
 
 def save_settings(totalPower: float):
     with closing(get_db()) as db, db:
@@ -102,19 +108,30 @@ def get_all_fve_panel_ids(settings_id: int):
         cursor.execute("SELECT id FROM fve_panels WHERE settings_id = ?", (settings_id,))
         return [row["id"] for row in cursor.fetchall()]
 
-def save_historical_data(data):
-    """Ukládá historická data do databáze."""
+def save_historical_data(df: pd.DataFrame):
+    """Ukládá historická data do databáze a přepisuje existující záznamy."""
+
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    
+
+    if "hour" in df.columns:
+        df["hour"] = df["hour"].fillna(24).astype(int)
+    else:
+        df["hour"] = 24  
+
+    data = df[["date", "hour", "fveProduction", "consumption", "temperatureMax", "temperatureMin"]].values.tolist()
+
+    print(f"🔄 Ukládám {len(data)} řádků do databáze...")
+
     cursor.executemany("""
-    INSERT INTO historicalData (date, fveProduction, consumption, temperatureMax, temperatureMin)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO historicalData (date, hour, fveProduction, consumption, temperatureMax, temperatureMin)
+    VALUES (?, ?, ?, ?, ?, ?)
     """, data)
 
     conn.commit()
     conn.close()
-    print("✅ Historická data byla úspěšně importována.")
+    print("✅ Historická data byla úspěšně importována do databáze.")
+
 
 if __name__ == "__main__":
     create_database()
