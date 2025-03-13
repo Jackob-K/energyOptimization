@@ -1,11 +1,15 @@
+import os
 import sqlite3
 from contextlib import closing
 import pandas as pd
 from typing import Optional
 
-DB_NAME = "energy_optimization.db"
+# Nastavení cesty na databázi relativně k `backend/`
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Absolutní cesta ke složce backend/
+DB_NAME = os.path.join(BASE_DIR, "energy_optimization.db")  # Cesta k databázi
 
 def get_db():
+    """Vrátí připojení k databázi s absolutní cestou."""
     db = sqlite3.connect(DB_NAME)
     db.row_factory = sqlite3.Row
     return db
@@ -50,14 +54,26 @@ def create_database():
     )
     """)
 
+    # ✅ Tabulka pro predikované hodnoty výroby FVE
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS predictions (
+        date TEXT,
+        hour INTEGER CHECK(hour BETWEEN 0 AND 24),  -- 0-23 pro hodinová data, 24 pro denní součet
+        fve_id INTEGER,
+        predicted_production REAL,
+        correction_factor REAL DEFAULT 1.0,
+        PRIMARY KEY (date, hour, fve_id),
+        FOREIGN KEY (fve_id) REFERENCES fve_panels (id)
+    )
+    """)
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS energy_prices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             datum TEXT NOT NULL,
             hodina INTEGER NOT NULL CHECK(hodina >= 0 AND hodina <= 23),
             cena REAL,
-            mnozstvi REAL,
-            UNIQUE(datum, hodina)  -- Přidáme unikátní klíč
+            mnozstvi REAL
         )
     """)
 
@@ -211,21 +227,20 @@ def get_energy_data():
     cursor.execute("""
         SELECT date, fveProduction, consumption 
         FROM historicalData 
-        WHERE hour = 24  -- Pouze denní data
+        WHERE hour = 24  -- Pouze denní souhrnná data
         ORDER BY date ASC
     """)
-    
+
     data = cursor.fetchall()
     conn.close()
-    
+
     formatted_data = [
         {"timestamp": row[0], "production": row[1], "consumption": row[2]}
         for row in data
     ]
 
-    #print(f"✅ Data pro frontend (denní hodnoty): {formatted_data}")  # Debugging
+    return formatted_data  # ✅ Vracíme všechna data, žádné filtrování!
 
-    return formatted_data
 
 
 if __name__ == "__main__":

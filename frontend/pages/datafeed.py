@@ -1,7 +1,10 @@
+# frontend/pages/datafeed.py
 import httpx
 import reflex as rx
 import base64
+from frontend.templates import template  # Import dekorátoru pro šablonu
 
+# Třída pro stav nahrávání souboru
 class FileUploadState(rx.State):
     """Ukládá stav nahrávání souboru."""
     file_name: str = ""
@@ -18,16 +21,15 @@ class FileUploadState(rx.State):
 
         try:
             for file in files:
-                # ✅ Reflex již posílá bytes, takže nepoužíváme file.read()
-                file_data = file  # `file` už je bytes!
+                file_data = file  # Reflex již posílá bytes, takže nepoužíváme file.read()
 
-                # ✅ Zakódujeme soubor do Base64
+                # Zakódujeme soubor do Base64
                 file_base64 = base64.b64encode(file_data).decode("utf-8")
                 
-                # ✅ Získáme název souboru správně
+                # Získáme název souboru
                 file_name = getattr(file, "name", "uploaded_file.xlsx")
 
-                # ✅ Pošleme JSON do backendu
+                # Pošleme JSON do backendu
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
                         "http://127.0.0.1:8000/upload/",
@@ -48,7 +50,13 @@ class FileUploadState(rx.State):
         async with self:
             self.uploading = False
 
-def page():
+# Použití šablony pro tuto stránku
+@template(
+    route="/datafeed",  # Definování cesty pro tuto stránku
+    title="DataFeed",
+    description="This is the Data Feed page for uploading historical data."
+)
+def page() -> rx.Component:
     return rx.container(
         rx.text("📂 Nahraj soubor pro zpracování"),
         rx.upload(
@@ -69,6 +77,3 @@ def page():
         rx.cond(FileUploadState.uploading, rx.text("⏳ Nahrávání..."), rx.text("✅ Hotovo!")),  
         padding="5em",
     )
-
-app = rx.App()
-app.add_page(page)

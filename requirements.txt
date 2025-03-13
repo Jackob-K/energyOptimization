@@ -16,6 +16,7 @@ fastapi==0.115.11
 frozenlist==1.5.0
 gunicorn==23.0.0
 h11==0.14.0
+h5py==3.13.0
 httpcore==1.0.7
 httpx==0.28.1
 id==1.5.0
@@ -40,6 +41,7 @@ pandas==2.2.3
 platformdirs==4.3.6
 propcache==0.3.0
 psutil==6.1.1
+pvlib==0.11.2
 pydantic==2.10.6
 pydantic_core==2.27.2
 Pygments==2.19.1
@@ -58,6 +60,7 @@ requests==2.32.3
 requests-toolbelt==1.0.0
 rfc3986==2.0.0
 rich==13.9.4
+scipy==1.15.2
 setuptools==76.0.0
 shellingham==1.5.4
 simple-websocket==1.1.0
