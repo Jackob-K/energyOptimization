@@ -196,20 +196,21 @@ def delete_fve_panel(panel_id: int):
 
 
 
-def save_historical_data(df: pd.DataFrame):
-    """Ukládá historická data do databáze a přepisuje existující záznamy."""
+import sqlite3
 
+def save_historical_data(df: pd.DataFrame):
+    """Ukládá historická data do databáze správně a přepisuje existující záznamy."""
+    
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
+    # Ověříme, zda soubor obsahuje `hour`
     if "hour" in df.columns:
-        df["hour"] = df["hour"].fillna(24).astype(int)
+        df["hour"] = df["hour"].fillna(24).astype(int)  # Pokud je prázdné → 24 (denní součet)
     else:
-        df["hour"] = 24  
+        df["hour"] = 24  # Přidáme defaultní hodnotu pro denní data
 
     data = df[["date", "hour", "fveProduction", "consumption", "temperatureMax", "temperatureMin"]].values.tolist()
-
-    print(f"🔄 Ukládám {len(data)} řádků do databáze...")
 
     cursor.executemany("""
     INSERT OR REPLACE INTO historicalData (date, hour, fveProduction, consumption, temperatureMax, temperatureMin)

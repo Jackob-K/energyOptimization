@@ -17,8 +17,8 @@ class SettingsState(rx.State):
             if response.status_code == 200:
                 data = response.json()
                 self.set_fve_fields(data["fve_fields"])  # ✅ Synchronizujeme UI
-                print(f"🔄 Načteno z DB: {data}")
-                print(f"🔄 Načteno z DB: {self.fve_fields}")  # ✅ Zobrazíme skutečnou hodnotu
+                #print(f"🔄 Načteno z DB: {data}")
+                #print(f"🔄 Načteno z DB: {self.fve_fields}")  # ✅ Zobrazíme skutečnou hodnotu
             else:
                 print("❌ Chyba při načítání dat.")
         except Exception as e:
