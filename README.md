@@ -4,17 +4,6 @@ MojeAplikace
 ├─ assets
 │  └─ favicon.ico
 ├─ backend
-│  ├─ Prediction
-│  │  ├─ Models
-│  │  │  ├─ XGBoostModel.py
-│  │  │  ├─ polynomialModel.py
-│  │  │  └─ randomForestModel.py
-│  │  ├─ __init__.py
-│  │  ├─ config.json
-│  │  ├─ modelInterface.py
-│  │  ├─ modelLoader.py
-│  │  ├─ trainModel.py
-│  │  └─ usagePrediction.py
 │  ├─ __init__.py
 │  ├─ dataImport.py
 │  ├─ database.py
@@ -26,12 +15,8 @@ MojeAplikace
 │  ├─ uploads
 │  └─ usagePrediction
 │     ├─ Models
-│     │  ├─ XGBoost.py
-│     │  ├─ polynomial.py
-│     │  └─ randomForest.py
 │     ├─ __init__.py
 │     ├─ dataProcessor.py
-│     ├─ prepareData.py
 │     ├─ trainModel.py
 │     └─ usagePrediction.py
 ├─ frontend
@@ -48,7 +33,6 @@ MojeAplikace
 │  │  ├─ dashboard.py
 │  │  ├─ datafeed.py
 │  │  └─ settings.py
-│  ├─ requirements.txt
 │  ├─ styles.py
 │  └─ templates
 │     ├─ __init__.py
