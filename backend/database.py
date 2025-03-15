@@ -49,7 +49,7 @@ def create_database():
         fveProduction REAL,
         fvePredicted REAL,
         consumption REAL,
-        conusumptionPredicted REAL,
+        consumptionPredicted REAL,
         temperature REAL,
         PRIMARY KEY (date, hour)  -- Každý záznam má unikátní kombinaci date + hour
     )
@@ -62,6 +62,35 @@ def create_database():
             hodina INTEGER NOT NULL CHECK(hodina >= 0 AND hodina <= 23),
             cena REAL,
             mnozstvi REAL
+        )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS processedData (
+        date TEXT,
+        hour INTEGER,
+        month INTEGER,
+        day_of_week INTEGER,
+        is_weekend INTEGER,
+        consumption REAL,
+        consumption_lag_1 REAL,
+        consumption_lag_2 REAL,
+        consumption_lag_3 REAL,
+        consumption_lag_24 REAL,
+        consumption_roll_3h REAL,
+        consumption_roll_6h REAL,
+        consumption_roll_12h REAL,
+        consumption_roll_24h REAL,
+        temperature REAL,
+        temperature_lag_1 REAL,
+        temperature_lag_2 REAL,
+        temperature_lag_3 REAL,
+        temperature_lag_24 REAL,
+        temperature_roll_3h REAL,
+        temperature_roll_6h REAL,
+        temperature_roll_12h REAL,
+        temperature_roll_24h REAL,
+        PRIMARY KEY (date, hour)
         )
     """)
 
