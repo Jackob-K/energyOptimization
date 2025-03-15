@@ -18,6 +18,31 @@ sidebar_width = "32em"
 sidebar_content_width = "16em"
 max_width = "1480px"
 color_box_size = ["2.25rem", "2.25rem", "2.5rem"]
+accent_color = "#1E88E5"  # Modrá (výroba FVE)
+accent_text_color = "#D32F2F"  # Červená (spotřeba)
+
+# ✅ Hlavní barvy pro grafy
+graph_consumption_color = "#D32F2F"  # Červená (spotřeba)
+graph_consumption_fill = "rgba(211, 47, 47, 0.3)"  # Červená výplň
+
+graph_production_color = "#1E88E5"  # Modrá (výroba FVE)
+graph_production_fill = "rgba(30, 136, 229, 0.3)"  # Modrá výplň
+
+# ✅ Další globální barvy
+accent_color = graph_production_color  # Může se použít i jinde
+accent_text_color = graph_consumption_color  # Může se použít i jinde
+
+background_color = "#F5F5F5"  # Světle šedé pozadí
+card_background = "#FFFFFF"  # Bílé pozadí karet
+text_color = "#333333"  # Tmavě šedý text
+
+# ✅ Barvy pro graf ceny elektřiny
+graph_price_color = "#FF9800"  # Oranžová čára pro cenu elektřiny
+graph_price_fill = "rgba(255, 152, 0, 0.3)"  # Oranžová výplň pro čáru
+
+graph_quantity_color = "#4CAF50"  # Zelená pro sloupce (množství)
+graph_quantity_fill = "rgba(76, 175, 80, 0.3)"  # Zelená výplň pro sloupce
+
 
 # Styl pro karty - přidat do styles.py
 card_style = {
@@ -90,3 +115,4 @@ base_stylesheets = [
 base_style = {
     "font_family": "Inter",
 }
+

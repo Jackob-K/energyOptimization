@@ -37,6 +37,7 @@ MojeAplikace
 ├─ frontend
 │  ├─ components
 │  │  ├─ card.py
+│  │  ├─ charts.py
 │  │  ├─ navbar.py
 │  │  └─ sidebar.py
 │  ├─ frontend.py

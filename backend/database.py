@@ -41,29 +41,17 @@ def create_database():
     )
     """)
 
-    # ✅ OPRAVENÁ tabulka `historicalData` (přidán sloupec `hour`)
+    # ✅ OPRAVENÁ tabulka `energyData` (přidán sloupec `hour`)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS historicalData (
+    CREATE TABLE IF NOT EXISTS energyData (
         date TEXT,
         hour INTEGER,  -- Přidán sloupec pro hodinová data
         fveProduction REAL,
+        fvePredicted REAL,
         consumption REAL,
-        temperatureMax REAL,
-        temperatureMin REAL,
+        conusumptionPredicted REAL,
+        temperature REAL,
         PRIMARY KEY (date, hour)  -- Každý záznam má unikátní kombinaci date + hour
-    )
-    """)
-
-    # ✅ Tabulka pro predikované hodnoty výroby FVE
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS predictions (
-        date TEXT,
-        hour INTEGER CHECK(hour BETWEEN 0 AND 24),  -- 0-23 pro hodinová data, 24 pro denní součet
-        fve_id INTEGER,
-        predicted_production REAL,
-        correction_factor REAL DEFAULT 1.0,
-        PRIMARY KEY (date, hour, fve_id),
-        FOREIGN KEY (fve_id) REFERENCES fve_panels (id)
     )
     """)
 
@@ -204,17 +192,19 @@ def save_historical_data(df: pd.DataFrame):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Ověříme, zda soubor obsahuje `hour`
-    if "hour" in df.columns:
-        df["hour"] = df["hour"].fillna(24).astype(int)  # Pokud je prázdné → 24 (denní součet)
-    else:
-        df["hour"] = 24  # Přidáme defaultní hodnotu pro denní data
+    # ✅ Převod NaN -> None pro SQLite
+    df = df.where(pd.notnull(df), None)
 
-    data = df[["date", "hour", "fveProduction", "consumption", "temperatureMax", "temperatureMin"]].values.tolist()
+    # Připravíme data pro vložení do databáze
+    data = df[["date", "hour", "fveProduction", "consumption", "temperature"]].values.tolist()
 
     cursor.executemany("""
-    INSERT OR REPLACE INTO historicalData (date, hour, fveProduction, consumption, temperatureMax, temperatureMin)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO energyData (date, hour, fveProduction, consumption, temperature)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(date, hour) DO UPDATE SET 
+        fveProduction = excluded.fveProduction,
+        consumption = excluded.consumption,
+        temperature = excluded.temperature;
     """, data)
 
     conn.commit()
@@ -227,7 +217,7 @@ def get_energy_data():
     
     cursor.execute("""
         SELECT date, fveProduction, consumption 
-        FROM historicalData 
+        FROM energyData 
         WHERE hour = 24  -- Pouze denní souhrnná data
         ORDER BY date ASC
     """)

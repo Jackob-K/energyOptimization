@@ -1,1 +1,0 @@
-#Zde predikujeme budoucí spotřebu objektu

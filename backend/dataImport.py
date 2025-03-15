@@ -6,7 +6,6 @@ import pandas as pd
 import os
 import base64
 import httpx
-from pydantic import BaseModel
 from typing import List, Optional
 
 # ✅ Nastavení loggeru
@@ -27,7 +26,7 @@ class SolarParams(BaseModel):
     fve_fields: List[FVEData]  # ✅ Seznam panelů FVE
 
 # ✅ Povinné sloupce v souboru
-REQUIRED_COLUMNS = {"date", "fveProduction", "consumption", "temperatureMax", "temperatureMin"}
+REQUIRED_COLUMNS = {"date", "hour", "consumption", "temperature", "fveProduction"}
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -80,20 +79,16 @@ async def process_uploaded_file(payload: ProcessFileModel):
             df = pd.read_excel(file_location)
         else:
             raise HTTPException(status_code=400, detail="Nepodporovaný formát souboru")
-
-        #logger.debug(f"📊 Načtený soubor:\n{df.head()}")  # Debug výstup
         
         if not REQUIRED_COLUMNS.issubset(df.columns):
             missing_columns = REQUIRED_COLUMNS - set(df.columns)
             raise HTTPException(status_code=400, detail=f"❌ Chybějící sloupce: {', '.join(missing_columns)}")
 
         df["date"] = pd.to_datetime(df["date"]).dt.date  
-        df["hour"] = df.get("hour", 24).fillna(24).astype(int)
+        df["hour"] = df["hour"].fillna(24).astype(int)
 
-        df = df[["date", "hour", "fveProduction", "consumption", "temperatureMax", "temperatureMin"]]
-
-        #logger.info(f"📊 Po úpravě dat:\n{df.head()}")  
-
+        df = df[["date", "hour", "fveProduction", "consumption", "temperature"]]
+        
         # ✅ Uložení dat do databáze
         database.save_historical_data(df)
 
@@ -103,22 +98,15 @@ async def process_uploaded_file(payload: ProcessFileModel):
         return {"message": "✅ Data byla úspěšně nahrána a uložena!"}
 
     except Exception as e:
-        #logger.error(f"❌ Chyba při zpracování souboru: {str(e)}")
         raise HTTPException(status_code=500, detail=f"❌ Chyba při zpracování: {str(e)}")
 
 @router.post("/import-settings/")
 async def import_settings(solar_params: SolarParams):
     """Uloží nastavení FVE a panely do databáze."""
-    #logger.info(f"✅ Přijatá data pro uložení: {solar_params.dict()}")
-
-    # ✅ Uložíme nastavení (totalPower) a získáme settings_id
     settings_id = database.save_settings(solar_params.totalPower)
-    #logger.info(f"✅ Uložené settings_id: {settings_id}")
 
     updated_panels = []
-
     for fve in solar_params.fve_fields:
-        #logger.info(f"📌 Ukládám/aktualizuji FVE: {fve}")
         panel_id = database.save_fve_panel(
             panel_id=fve.id if fve.id is not None else None,
             settings_id=settings_id,
@@ -128,7 +116,12 @@ async def import_settings(solar_params: SolarParams):
             azimuth=fve.azimuth,
             power=fve.power
         )
-        #logger.info(f"✅ Panel ID: {panel_id} byl úspěšně uložen.")
         updated_panels.append(panel_id)
 
     return {"message": "✅ Parametry FVE byly úspěšně uloženy", "saved_panels": updated_panels}
+
+@router.get("/get-settings/")
+async def get_settings():
+    """Vrací uložené parametry FVE zpět do UI."""
+    data = database.get_fve_data()
+    return data

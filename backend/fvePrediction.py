@@ -94,41 +94,40 @@ def calculate_production(panel, weather):
     
     return production
 
-def save_predictions(date, fve_id, hourly_production):
-    """Přepíše data pro existující datum nebo přidá nová data pod stávající predikce."""
+def save_predictions(date, hourly_production):
+    """Zapíše nebo aktualizuje souhrnná data v tabulce energyData."""
     with get_db() as db:
         cursor = db.cursor()
-
-        # 🚨 Nejprve smažeme existující data pro daný den a FVE panel
-        print(f"🗑 Odstraňuji staré predikce pro FVE {fve_id} na {date}...")
-        cursor.execute("""
-            DELETE FROM predictions WHERE date = ? AND fve_id = ?
-        """, (date, fve_id))
-
-        # ✅ Vložíme nové predikce
-        print(f"📊 Ukládám nová data pro FVE {fve_id} na {date}...")
-        for hour, production in enumerate(hourly_production):
-            corrected_production = max(0, production)  # ✅ Oprava: záporné hodnoty nastavíme na 0
-            
-            print(f"✅ Ukládám: date={date}, hour={hour}, fve_id={fve_id}, production={corrected_production}")
-            cursor.execute("""
-                INSERT INTO predictions (date, hour, fve_id, predicted_production)
-                VALUES (?, ?, ?, ?)
-            """, (date, hour, fve_id, corrected_production))
         
-        # ✅ Uložíme součet jako "denní predikci" (hour=24)
-        total_production = sum(max(0, p) for p in hourly_production)  # ✅ Ujistíme se, že suma neobsahuje záporné hodnoty
-        print(f"✅ Ukládám denní sumu: date={date}, hour=24, fve_id={fve_id}, production={total_production}")
+        for hour in range(24):
+            total_production = sum(max(0, prod.iloc[hour]) for prod in hourly_production)
+            
+            cursor.execute("""
+                UPDATE energyData SET fvePredicted = ? 
+                WHERE date = ? AND hour = ?
+            """, (total_production, date, hour))
+            
+            if cursor.rowcount == 0:  # Pokud neexistuje, vytvoříme nový záznam
+                cursor.execute("""
+                    INSERT INTO energyData (date, hour, fvePredicted)
+                    VALUES (?, ?, ?)
+                """, (date, hour, total_production))
+        
+        # ✅ Uložíme sumu za celý den jako hour=24
+        daily_total_production = sum(sum(max(0, p) for p in prod) for prod in hourly_production)
         cursor.execute("""
-            INSERT INTO predictions (date, hour, fve_id, predicted_production)
-            VALUES (?, 24, ?, ?)
-        """, (date, fve_id, total_production))
-
+            UPDATE energyData SET fvePredicted = ? 
+            WHERE date = ? AND hour = 24
+        """, (daily_total_production, date))
+        
+        if cursor.rowcount == 0:  # Pokud neexistuje, vytvoříme nový záznam
+            cursor.execute("""
+                INSERT INTO energyData (date, hour, fvePredicted)
+                VALUES (?, 24, ?)
+            """, (date, daily_total_production))
+        
         db.commit()
-        print(f"✅ Predikce pro FVE {fve_id} byla úspěšně aktualizována.")
 
-
-# 🚀 Hlavní funkce
 def main():
     """Hlavní funkce pro výpočet a uložení predikce výroby FVE."""
     print("🔄 Spouštím predikci výroby FVE...")
@@ -136,18 +135,16 @@ def main():
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
     panels = get_fve_panels()
 
+    all_hourly_productions = []
     for panel in panels:
-        print(f"📡 Načítám počasí pro FVE {panel['id']}...")
-        weather = get_weather_forecast(
-            panel["latitude"], panel["longitude"], panel["tilt"], panel["azimuth"]
-        )
+        weather = get_weather_forecast(panel["latitude"], panel["longitude"], panel["tilt"], panel["azimuth"])
         
         if weather:
-            print(f"⚡ Vypočítávám výrobu pro FVE {panel['id']}...")
             hourly_production = calculate_production(panel, weather)
-            save_predictions(tomorrow, panel["id"], hourly_production)
+            all_hourly_productions.append(hourly_production)
 
-
+    if all_hourly_productions:
+        save_predictions(tomorrow, all_hourly_productions)
 
     print("✅ Predikce výroby dokončena!")
 
