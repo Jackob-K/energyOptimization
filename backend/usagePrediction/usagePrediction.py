@@ -57,24 +57,26 @@ def get_processed_data():
     return df
 
 def save_predictions_to_db(predictions, processed_df):
-    """Uloží predikce do databáze."""
+    """Uloží predikce do databáze se zaokrouhlením na dvě desetinná místa."""
     with get_db() as conn:
         cursor = conn.cursor()
         for i, prediction in enumerate(predictions):
-            date_str = processed_df.iloc[i]["date"].strftime("%Y-%m-%d")  # ✅ Oprava: datetime na string
-            hour = int(processed_df.iloc[i]["hour"])  # ✅ Oprava: Ujistíme se, že je to integer
+            date_str = processed_df.iloc[i]["date"].strftime("%Y-%m-%d")  # ✅ Převod na string
+            hour = int(processed_df.iloc[i]["hour"])  # ✅ Převod na integer
+            rounded_prediction = round(float(prediction), 2)  # ✅ Zaokrouhlení na dvě desetinná místa
 
-            print(f"Ukládám predikci: {date_str} {hour}:00 → {prediction:.2f}")  # ✅ Debugging výstup
+            print(f"Ukládám predikci: {date_str} {hour}:00 → {rounded_prediction:.2f}")  # ✅ Debugging výstup
 
             query = """
             UPDATE energyData
             SET consumptionPredicted = ?
             WHERE date(date) = date(?) AND hour = ?;
             """
-            cursor.execute(query, (float(prediction), date_str, hour))  # ✅ Oprava: date() formátování
+            cursor.execute(query, (rounded_prediction, date_str, hour))
 
         conn.commit()
-        print("✅ Všechny predikce byly uloženy do databáze!")
+        print("✅ Všechny predikce byly uloženy do databáze se zaokrouhlením na 2 desetinná místa!")
+
 
 
 if __name__ == "__main__":

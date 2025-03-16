@@ -6,7 +6,7 @@ from typing import Optional
 
 # Nastavení cesty na databázi relativně k `backend/`
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Absolutní cesta ke složce backend/
-DB_NAME = os.path.join(BASE_DIR, "energy_optimization.db")  # Cesta k databázi
+DB_NAME = os.path.join(BASE_DIR, "database.db")  # Cesta k databázi
 
 def get_db():
     """Vrátí připojení k databázi s absolutní cestou."""
@@ -23,8 +23,9 @@ def create_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        totalPower REAL
-    )
+        paramName TEXT UNIQUE,
+        value TEXT
+    );
     """)
 
     # ✅ Tabulka pro FVE panely
@@ -148,21 +149,22 @@ def get_fve_data():
     with closing(get_db()) as db:
         cursor = db.cursor()
 
-        # ✅ Získání celkového výkonu FVE
-        cursor.execute("SELECT totalPower FROM settings WHERE id = 1")
-        settings_data = cursor.fetchone()
+        # ✅ Získání celkového výkonu jako SUMA všech hodnot ve sloupci power
+        cursor.execute("SELECT SUM(power) AS totalPower FROM fve_panels")
+        total_power_data = cursor.fetchone()
+        total_power = total_power_data["totalPower"] if total_power_data and total_power_data["totalPower"] is not None else 0
 
         # ✅ Načtení všech FVE panelů
         cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fve_panels")
         fve_panels = cursor.fetchall()
 
         # ✅ Debug log - vypíše do konzole, co se načetlo
-        print(f"🔍 Načtené nastavení: {settings_data}")
+        print(f"🔍 Celkový výkon: {total_power}")
         print(f"🔍 Načtené panely: {fve_panels}")
 
         # ✅ Opravený návratový formát pro API
         return {
-            "totalPower": settings_data["totalPower"] if settings_data else 0,
+            "totalPower": total_power,  # Celkový výkon je nyní vypočítán ze SUM(power)
             "fve_fields": [
                 {
                     "id": row["id"],
@@ -211,10 +213,6 @@ def delete_fve_panel(panel_id: int):
         return True  # ✅ Úspěšné smazání a přepočet
 
 
-
-
-import sqlite3
-
 def save_historical_data(df: pd.DataFrame):
     """Ukládá historická data do databáze správně a přepisuje existující záznamy."""
     
@@ -223,6 +221,10 @@ def save_historical_data(df: pd.DataFrame):
 
     # ✅ Převod NaN -> None pro SQLite
     df = df.where(pd.notnull(df), None)
+
+    # ✅ Zaokrouhlení sloupců na 2 desetinná místa
+    df["fveProduction"] = df["fveProduction"].astype(float).round(2)
+    df["consumption"] = df["consumption"].astype(float).round(2)
 
     # Připravíme data pro vložení do databáze
     data = df[["date", "hour", "fveProduction", "consumption", "temperature"]].values.tolist()

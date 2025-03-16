@@ -100,7 +100,7 @@ def save_predictions(date, hourly_production):
         cursor = db.cursor()
         
         for hour in range(24):
-            total_production = sum(max(0, prod.iloc[hour]) for prod in hourly_production)
+            total_production = round(sum(max(0, prod.iloc[hour]) for prod in hourly_production), 2)
             
             cursor.execute("""
                 UPDATE energyData SET fvePredicted = ? 
@@ -114,7 +114,7 @@ def save_predictions(date, hourly_production):
                 """, (date, hour, total_production))
         
         # ✅ Uložíme sumu za celý den jako hour=24
-        daily_total_production = sum(sum(max(0, p) for p in prod) for prod in hourly_production)
+        daily_total_production = round(sum(sum(max(0, p) for p in prod) for prod in hourly_production), 2)
         cursor.execute("""
             UPDATE energyData SET fvePredicted = ? 
             WHERE date = ? AND hour = 24
