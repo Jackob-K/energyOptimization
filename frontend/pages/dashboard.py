@@ -1,10 +1,18 @@
+"""
+Modul pro hlavní stránku dashboardu s grafy.
+
+Vstup: Stavy grafů (MainChartState, PriceChartState).
+Výstup: Dashboard zobrazující hlavní graf spotřeby/výroby a cenový graf.
+Spolupracuje s: Reflex (UI framework), frontend.templates (šablona), mainChart, priceChart.
+"""
+
 import reflex as rx
 from ..templates import template
 from ..components.mainChart import mainChart, MainChartState
 from ..components.priceChart import priceChart, PriceChartState
 
 def resetButton():
-    """Tlačítko pro reset na dnešní datum."""
+    """resetButton"""
     return rx.box(
         rx.button(
             "🔄 Restart na dnešní datum",
@@ -22,7 +30,7 @@ def resetButton():
 
 @template(route="/dashboard", title="Dashboard", on_load=[MainChartState.setToday, PriceChartState.setToday])
 def page() -> rx.Component:
-    """Hlavní stránka dashboardu s grafy."""
+    """page"""
     return rx.vstack(
         resetButton(),
         mainChart(),

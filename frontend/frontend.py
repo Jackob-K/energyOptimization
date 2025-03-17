@@ -1,33 +1,37 @@
+"""
+Hlavní soubor aplikace pro správu solární optimalizace.
+
+Vstup: Uživatel vybírá mezi stránkami Dashboard, Settings a DataFeed.
+Výstup: Dynamické načítání obsahu na základě uživatelské volby.
+Spolupracuje s: Moduly `dashboard`, `settings`, `datafeed` a komponentou `navbar`.
+"""
+
 import reflex as rx
 from .pages import dashboard, settings, datafeed
-from .components.navbar import navbar  # Import navbar z komponenty
+from .components.navbar import navbar  
 
-# Funkce pro navbar s odkazy místo záložek
-import reflex as rx
-
-# Funkce pro navbar s odkazy místo záložek a s ikonami
-def navbar() -> rx.Component:
-    return rx.vstack(  # Používáme vstack pro vertikální uspořádání
-        rx.hstack(  # Vodorovné uspořádání pro Dashboard s ikonou
-            rx.icon("home", size=20),  # Ikona pro Dashboard (může být jakákoliv ikona)
-            rx.link("Dashboard", href="/dashboard", style={"margin-left": "10px"}),  # Odkaz na Dashboard
+def navbarMenu() -> rx.Component:
+    """Vytváří navigační menu s odkazy a ikonami."""
+    return rx.vstack(  
+        rx.hstack(  
+            rx.icon("home", size=20),  
+            rx.link("Dashboard", href="/dashboard", style={"margin-left": "10px"}),  
         ),
-        rx.hstack(  # Vodorovné uspořádání pro Settings s ikonou
-            rx.icon("settings", size=20),  # Ikona pro Settings
-            rx.link("Settings", href="/settings", style={"margin-left": "10px"}),    # Odkaz na Settings
+        rx.hstack(  
+            rx.icon("settings", size=20),  
+            rx.link("Settings", href="/settings", style={"margin-left": "10px"}),    
         ),
-        rx.hstack(  # Vodorovné uspořádání pro DataFeed s ikonou
-            rx.icon("cloud-upload", size=20),  # Ikona pro DataFeed
-            rx.link("DataFeed", href="/datafeed", style={"margin-left": "10px"}),    # Odkaz na DataFeed
+        rx.hstack(  
+            rx.icon("cloud-upload", size=20),  
+            rx.link("DataFeed", href="/datafeed", style={"margin-left": "10px"}),    
         ),
     )
 
-
-# Hlavní stránka, která zobrazuje navbar a text
 def index() -> rx.Component:
+    """Hlavní stránka aplikace."""
     return rx.container(
-        navbar(),  # Zobrazíme navbar (menu)
-        rx.text("Welcome to the Solar Optimization App"),  # Hlavní text stránky
+        navbarMenu(),  
+        rx.text("Welcome to the Solar Optimization App"),  
     )
 
 # Aplikace a její stránky

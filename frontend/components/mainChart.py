@@ -1,11 +1,19 @@
+"""
+Modul pro vizualizaci výroby a spotřeby energie pomocí grafu.
+
+Vstup: Data z databáze obsahující hodnoty spotřeby a výroby energie.
+Výstup: Graf zobrazující aktuální i historická data, včetně predikovaných hodnot.
+Spolupracuje s: backend.database (načítání dat), frontend.styles (styly), Reflex (UI komponenty).
+"""
+
 import reflex as rx
 from datetime import datetime, timedelta
-from backend.database import get_db
+from backend.database import getDb
 from ..components.card import card
 from .. import styles
 
 class MainChartState(rx.State):
-    """Správa stavu hlavního grafu (výroba/spotřeba)."""
+    """MainChartState"""
     currentDate: str = datetime.today().strftime("%Y-%m-%d")
     selectedInterval: str = "month"
     chartData: list = []
@@ -13,7 +21,7 @@ class MainChartState(rx.State):
 
     def fetchData(self):
         """Načítá data z databáze pro hlavní graf podle vybraného intervalu."""
-        conn = get_db()
+        conn = getDb()
         cursor = conn.cursor()
         endDate = datetime.strptime(self.currentDate, "%Y-%m-%d")
 
@@ -125,40 +133,35 @@ class MainChartState(rx.State):
                     "fvePredicted": predictedProduction,
                 })
 
-        self.chartData = processedData  # ✅ Nyní obsahuje správné hodnoty osy X pro celý graf
+        self.chartData = processedData
 
     def shiftDate(self, direction: str):
-        """Posune datum dopředu nebo dozadu podle intervalu, ale jen v rámci dostupných dat."""
-        conn = get_db()
+        """shiftDate"""
+        conn = getDb()
         cursor = conn.cursor()
-
-        # ✅ Získání minimálního a maximálního roku s daty
         query = "SELECT MIN(SUBSTR(date, 1, 4)), MAX(SUBSTR(date, 1, 4)) FROM energyData"
         cursor.execute(query)
         minYear, maxYear = cursor.fetchone()
         conn.close()
 
-        # Převod na celé číslo (někdy se mohou vrátit None, pokud není žádná data)
         minYear = int(minYear) if minYear else None
         maxYear = int(maxYear) if maxYear else None
 
         if direction in ["prev_start", "next_end"]:
             if direction == "prev_start" and minYear:
-                self.currentDate = f"{minYear}-01-01"  # Přepnutí na první dostupný rok
+                self.currentDate = f"{minYear}-01-01"
             elif direction == "next_end" and maxYear:
-                self.currentDate = f"{maxYear}-01-01"  # Přepnutí na poslední dostupný rok
+                self.currentDate = f"{maxYear}-01-01"
 
         else:
             dateObj = datetime.strptime(self.currentDate, "%Y-%m-%d")
 
             if self.selectedInterval == "year":
                 newYear = dateObj.year - 1 if direction == "prev" else dateObj.year + 1
-
-                # ✅ Ověření, zda nový rok spadá do dostupného rozsahu
                 if minYear <= newYear <= maxYear:
                     dateObj = dateObj.replace(year=newYear, month=1, day=1)
                 else:
-                    return  # ❌ Pokud je mimo rozsah, neposunujeme datum
+                    return
 
             elif self.selectedInterval == "month":
                 month = dateObj.month - 1 if direction == "prev" else dateObj.month + 1
@@ -170,62 +173,51 @@ class MainChartState(rx.State):
                     month = 1
                     year += 1
 
-                # ✅ Ověření, zda je rok v rozsahu dat
                 if minYear <= year <= maxYear:
                     dateObj = dateObj.replace(year=year, month=month, day=1)
                 else:
-                    return  # ❌ Neposuneme se, pokud rok není v databázi
+                    return
 
             elif self.selectedInterval == "week":
                 delta = timedelta(weeks=1)
-                if direction == "prev":
-                    dateObj -= delta
-                elif direction == "next":
-                    dateObj += delta
-                dateObj -= timedelta(days=dateObj.weekday())  # Pondělí daného týdne
+                dateObj -= delta if direction == "prev" else -delta
+                dateObj -= timedelta(days=dateObj.weekday())
 
             elif self.selectedInterval == "day":
                 delta = timedelta(days=1)
-                if direction == "prev":
-                    dateObj -= delta
-                elif direction == "next":
-                    dateObj += delta
+                dateObj -= delta if direction == "prev" else -delta
 
             self.currentDate = dateObj.strftime("%Y-%m-%d")
 
         self.fetchData()
 
-
-
     def formatXAxisTicks(self, value):
-        """Formátování hodnot osy X podle vybraného intervalu ještě před zobrazením v grafu."""
+        """formatXAxisTicks"""
         try:
             if self.selectedInterval == "year":
-                return str(int(value.split("-")[1]))  # 1-12 (měsíce)
+                return str(int(value.split("-")[1]))
 
             elif self.selectedInterval == "month":
-                return str(int(value.split("-")[-1]))  # Den v měsíci
+                return str(int(value.split("-")[-1]))
 
             elif self.selectedInterval == "week":
                 days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
-                day_number = int(value.split("-")[-1].split(" ")[0])  # Extrahuje číslo dne
-                return days[day_number % 7]  # Vrátí název dne
+                dayNumber = int(value.split("-")[-1].split(" ")[0])
+                return days[dayNumber % 7]
 
             elif self.selectedInterval == "day":
-                hour = value.split(" ")[-1]  # Extrahuje hodinu (např. "12")
-                return f"{int(hour):02d}:00"  # Vrátí formát HH:00
+                hour = value.split(" ")[-1]
+                return f"{int(hour):02d}:00"
 
         except ValueError:
-            return str(value)  # Pokud dojde k chybě, vrátí nezměněnou hodnotu
+            return str(value)
 
         return str(value)
 
-
-    
     def updateDisplayedInterval(self):
-        """Změní zobrazované období mezi šipkami podle vybraného intervalu."""
+        """updateDisplayedInterval"""
         if self.selectedInterval == "year":
-            self.displayedInterval = self.currentDate[:4]  # Jen rok
+            self.displayedInterval = self.currentDate[:4]
         elif self.selectedInterval == "month":
             self.displayedInterval = f"{self.currentDate[:7]}-01 až {self.currentDate[:7]}-31"
         elif self.selectedInterval == "week":
@@ -234,8 +226,7 @@ class MainChartState(rx.State):
             endWeek = startWeek + timedelta(days=6)
             self.displayedInterval = f"{startWeek.strftime('%Y-%m-%d')} až {endWeek.strftime('%Y-%m-%d')}"
         elif self.selectedInterval == "day":
-            self.displayedInterval = self.currentDate  # Jen datum
-
+            self.displayedInterval = self.currentDate
 
     def setSelectedInterval(self, interval: str):
         """Změní interval a načte nová data."""
@@ -248,35 +239,28 @@ class MainChartState(rx.State):
         self.fetchData()
 
 def mainChart():
-    """Komponenta zobrazující hlavní graf výroby a spotřeby."""
+    """mainChart"""
     return rx.box(
         rx.heading("Graf spotřeby a výroby", size="4", margin_bottom="1rem"),
         card(
             rx.vstack(
                 rx.hstack(
-                    
-                    # Tlačítka pro posun intervalu (zarovnaná doprava)
                     rx.hstack(
-                        rx.button(rx.icon("chevrons-left"), on_click=lambda: MainChartState.shiftDate("prev_start"), style=styles.button_style),
-                        rx.button(rx.icon("chevron-left"), on_click=lambda: MainChartState.shiftDate("prev"), style=styles.button_style),
-                        rx.text(MainChartState.displayedInterval),  # ✅ Dynamické zobrazení období
-                        rx.button(rx.icon("chevron-right"), on_click=lambda: MainChartState.shiftDate("next"), style=styles.button_style),
-                        rx.button(rx.icon("chevrons-right"), on_click=lambda: MainChartState.shiftDate("next_end"), style=styles.button_style),
+                        rx.button(rx.icon("chevrons-left"), on_click=lambda: MainChartState.shiftDate("prev_start"), style=styles.buttonStyle),
+                        rx.button(rx.icon("chevron-left"), on_click=lambda: MainChartState.shiftDate("prev"), style=styles.buttonStyle),
+                        rx.text(MainChartState.displayedInterval),
+                        rx.button(rx.icon("chevron-right"), on_click=lambda: MainChartState.shiftDate("next"), style=styles.buttonStyle),
+                        rx.button(rx.icon("chevrons-right"), on_click=lambda: MainChartState.shiftDate("next_end"), style=styles.buttonStyle),
                         spacing="4",
                     ),
-
                     rx.spacer(),
-
-                    # Výběr intervalu (zarovnaný doleva)
                     rx.select(
                         ["day", "week", "month", "year"],
                         value=MainChartState.selectedInterval,
                         on_change=MainChartState.setSelectedInterval,
                     ),
-                    
-
                     width="100%",  
-                    justify="between",  # ✅ Zarovnání prvků do krajů
+                    justify="between",
                 ),
                 rx.recharts.area_chart(
                     rx.recharts.area(

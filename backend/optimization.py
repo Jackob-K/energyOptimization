@@ -1,71 +1,75 @@
-import sqlite3
-import json
+"""
+Modul pro optimalizaci spotřeby energie na základě predikovaných dat a cen elektřiny.
+
+Vstup: Predikce spotřeby a výroby FVE, ceny elektřiny, parametry jističe.
+Výstup: Optimalizovaný plán spotřeby uložený v JSON souboru.
+Spolupracuje s: SQLite databází.
+"""
+
+# Standardní knihovny
 import os
+import json
+import sqlite3
 from datetime import datetime, timedelta
 
-DB_NAME = os.path.abspath("backend/database.db")  # Absolutní cesta
-JSON_OUTPUT_PATH = "optimized_schedule.json"
+# Konstanty
+dbName = os.path.abspath("backend/database.db")  # Absolutní cesta
+jsonOutputPath = "optimized_schedule.json"
 
-def fetch_setting(param_name, data_type=int):
-    """Získá hodnotu parametru z tabulky settings a převede ji na požadovaný typ."""
-    conn = sqlite3.connect(DB_NAME)
+def fetchSetting(paramName, dataType=int):
+    """fetchSetting"""
+    conn = sqlite3.connect(dbName)
     cursor = conn.cursor()
-    cursor.execute("SELECT value FROM settings WHERE paramName = ?", (param_name,))
+    cursor.execute("SELECT value FROM settings WHERE paramName = ?", (paramName,))
     result = cursor.fetchone()
     conn.close()
-    return data_type(result[0]) if result else None  # Konverze na zadaný datový typ
+    return dataType(result[0]) if result else None  
 
-def fetch_data():
-    """Načte potřebná data z databáze."""
-    conn = sqlite3.connect(DB_NAME)
+def fetchData():
+    """fetchData"""
+    conn = sqlite3.connect(dbName)
     cursor = conn.cursor()
 
-    # Načtení nastavení (jistič, fáze, override)
-    breaker_current = fetch_setting("breakerCurrentPerPhase", int)
-    phases = fetch_setting("phases", int)
-    override_mode = fetch_setting("overrideMode", int)
-    max_power = breaker_current * 230 * phases  # Výpočet max. výkonu v W
+    breakerCurrent = fetchSetting("breakerCurrentPerPhase", int)
+    phases = fetchSetting("phases", int)
+    overrideMode = fetchSetting("overrideMode", int)
+    maxPower = breakerCurrent * 230 * phases  
 
-    # Načtení predikce spotřeby a výroby FVE
     cursor.execute("SELECT hour, consumptionPredicted, fvePredicted FROM energyData WHERE date = date('now', '+1 day')")
-    energy_data = cursor.fetchall()
+    energyData = cursor.fetchall()
     
-    # Načtení cen elektřiny
     cursor.execute("SELECT hodina, cena FROM energy_prices WHERE datum = date('now', '+1 day')")
-    price_data = dict(cursor.fetchall())  # Převod na slovník {hodina: cena}
+    priceData = dict(cursor.fetchall())  
     
     conn.close()
     
-    # Oprava None hodnot (aby se neobjevila TypeError chyba)
-    energy_data = [(hour, consumption if consumption is not None else 0, fve if fve is not None else 0)
-                   for hour, consumption, fve in energy_data]
+    energyData = [(hour, consumption if consumption is not None else 0, fve if fve is not None else 0)
+                   for hour, consumption, fve in energyData]
     
-    return energy_data, price_data, max_power, override_mode
+    return energyData, priceData, maxPower, overrideMode
 
-def optimize_consumption():
-    """Vypočítá optimální odběr elektřiny."""
-    energy_data, price_data, max_power, override_mode = fetch_data()
+def optimizeConsumption():
+    """optimizeConsumption"""
+    energyData, priceData, maxPower, overrideMode = fetchData()
     schedule = []
     
-    for hour, consumption, fve in energy_data:
-        net_consumption = max(consumption - fve, 0)  # Pokud je přebytek, nečerpáme ze sítě
-        price = price_data.get(hour, 0)
-        schedule.append({"hour": hour, "power_kW": round(min(net_consumption, max_power / 1000), 2), "price": price})
+    for hour, consumption, fve in energyData:
+        netConsumption = max(consumption - fve, 0)  
+        price = priceData.get(hour, 0)
+        schedule.append({"hour": hour, "power_kW": round(min(netConsumption, maxPower / 1000), 2), "price": price})
     
-    # Seřadit podle ceny elektřiny (nejlevnější první)
-    schedule.sort(key=lambda x: x["price"])
+    schedule.sort(key=lambda x: x["price"])  
 
-    # Přidání data
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     
-    return {"date": tomorrow, "overrideMode": override_mode, "recommendedHours": schedule}
+    return {"date": tomorrow, "overrideMode": overrideMode, "recommendedHours": schedule}
 
-def save_to_json(data):
-    """Uloží optimalizovaný plán do JSON."""
-    with open(JSON_OUTPUT_PATH, "w") as f:
+def saveToJson(data):
+    """saveToJson"""
+    with open(jsonOutputPath, "w") as f:
         json.dump(data, f, indent=4)
-    print(f"✅ Optimalizace uložena do {JSON_OUTPUT_PATH}")
+    print(f"✅ Optimalizace uložena do {jsonOutputPath}")
 
 if __name__ == "__main__":
-    optimized_schedule = optimize_consumption()
-    save_to_json(optimized_schedule)
+    optimizedSchedule = optimizeConsumption()
+    saveToJson(optimizedSchedule)

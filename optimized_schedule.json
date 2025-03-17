@@ -1,5 +1,5 @@
 {
-    "date": "2025-03-17",
+    "date": "2025-03-18",
     "overrideMode": 0,
     "recommendedHours": [
         {
@@ -8,124 +8,124 @@
             "price": 0
         },
         {
-            "hour": 13,
-            "power_kW": 1.13,
-            "price": 7.22
+            "hour": 11,
+            "power_kW": 3.35,
+            "price": 2.24
         },
         {
             "hour": 12,
-            "power_kW": 0.78,
-            "price": 9.61
+            "power_kW": 2.47,
+            "price": 3.38
+        },
+        {
+            "hour": 13,
+            "power_kW": 2.14,
+            "price": 4.28
         },
         {
             "hour": 14,
-            "power_kW": 2.37,
-            "price": 13.62
-        },
-        {
-            "hour": 11,
-            "power_kW": 1.33,
-            "price": 17.75
-        },
-        {
-            "hour": 15,
-            "power_kW": 3.92,
-            "price": 31.0
+            "power_kW": 2.47,
+            "price": 8.44
         },
         {
             "hour": 10,
-            "power_kW": 2.86,
-            "price": 36.86
+            "power_kW": 4.21,
+            "price": 32.93
         },
         {
-            "hour": 16,
-            "power_kW": 5.48,
-            "price": 71.48
+            "hour": 15,
+            "power_kW": 3.99,
+            "price": 63.68
         },
         {
             "hour": 9,
-            "power_kW": 4.55,
-            "price": 77.14
-        },
-        {
-            "hour": 8,
-            "power_kW": 6.05,
-            "price": 77.95
+            "power_kW": 5.12,
+            "price": 74.26
         },
         {
             "hour": 3,
-            "power_kW": 6.97,
-            "price": 78.18
-        },
-        {
-            "hour": 4,
-            "power_kW": 7.0,
-            "price": 78.6
-        },
-        {
-            "hour": 2,
-            "power_kW": 6.98,
-            "price": 79.62
-        },
-        {
-            "hour": 5,
-            "power_kW": 7.0,
-            "price": 80.51
-        },
-        {
-            "hour": 23,
-            "power_kW": 6.33,
-            "price": 80.97
-        },
-        {
-            "hour": 7,
-            "power_kW": 6.94,
-            "price": 82.07
-        },
-        {
-            "hour": 6,
             "power_kW": 7.03,
-            "price": 85.14
+            "price": 89.77
         },
         {
             "hour": 1,
-            "power_kW": 6.99,
-            "price": 85.79
+            "power_kW": 6.92,
+            "price": 89.99
         },
         {
             "hour": 0,
-            "power_kW": 7.03,
-            "price": 90.01
+            "power_kW": 6.92,
+            "price": 92.2
+        },
+        {
+            "hour": 2,
+            "power_kW": 6.91,
+            "price": 92.64
+        },
+        {
+            "hour": 4,
+            "power_kW": 7.07,
+            "price": 96.35
+        },
+        {
+            "hour": 16,
+            "power_kW": 5.55,
+            "price": 98.36
+        },
+        {
+            "hour": 23,
+            "power_kW": 6.34,
+            "price": 103.62
+        },
+        {
+            "hour": 8,
+            "power_kW": 6.39,
+            "price": 106.52
+        },
+        {
+            "hour": 5,
+            "power_kW": 7.13,
+            "price": 112.01
         },
         {
             "hour": 22,
-            "power_kW": 6.25,
-            "price": 101.41
+            "power_kW": 6.35,
+            "price": 117.17
         },
         {
             "hour": 21,
-            "power_kW": 6.27,
-            "price": 108.29
+            "power_kW": 6.35,
+            "price": 123.77
         },
         {
-            "hour": 17,
-            "power_kW": 6.52,
-            "price": 118.11
+            "hour": 7,
+            "power_kW": 7.07,
+            "price": 136.68
+        },
+        {
+            "hour": 6,
+            "power_kW": 7.11,
+            "price": 140.16
         },
         {
             "hour": 20,
-            "power_kW": 6.28,
-            "price": 125.79
+            "power_kW": 6.35,
+            "price": 143.45
         },
         {
-            "hour": 18,
-            "power_kW": 6.72,
-            "price": 131.69
+            "hour": 17,
+            "power_kW": 6.61,
+            "price": 143.47
         },
         {
             "hour": 19,
-            "power_kW": 6.59,
-            "price": 140.0
+            "power_kW": 6.78,
+            "price": 167.11
+        },
+        {
+            "hour": 18,
+            "power_kW": 6.9,
+            "price": 171.92
         }
     ]
 }

@@ -1,21 +1,18 @@
-"""Sidebar component for the app."""
+"""
+Modul pro komponentu postranního panelu (Sidebar).
+
+Vstup: Dynamicky generované navigační položky.
+Výstup: Sidebar s navigačními položkami, logem, odkazy na dokumentaci a možností změny režimu barev.
+Spolupracuje s: Reflex (UI framework), frontend.styles (styly), backend (stránky aplikace).
+"""
 
 import reflex as rx
-
 from .. import styles
-
 from reflex.page import get_decorated_pages
 
-
-def sidebar_header() -> rx.Component:
-    """Sidebar header.
-
-    Returns:
-        The sidebar header component.
-
-    """
+def sidebarHeader() -> rx.Component:
+    """sidebarHeader"""
     return rx.hstack(
-        # The logo.
         rx.color_mode_cond(
             rx.image(src="/reflex_black.svg", height="1.5em"),
             rx.image(src="/reflex_white.svg", height="1.5em"),
@@ -27,14 +24,8 @@ def sidebar_header() -> rx.Component:
         margin_bottom="1em",
     )
 
-
-def sidebar_footer() -> rx.Component:
-    """Sidebar footer.
-
-    Returns:
-        The sidebar footer component.
-
-    """
+def sidebarFooter() -> rx.Component:
+    """sidebarFooter"""
     return rx.hstack(
         rx.link(
             rx.text("Docs", size="3"),
@@ -56,23 +47,12 @@ def sidebar_footer() -> rx.Component:
         padding="0.35em",
     )
 
-
-def sidebar_item_icon(icon: str) -> rx.Component:
+def sidebarItemIcon(icon: str) -> rx.Component:
+    """sidebarItemIcon"""
     return rx.icon(icon, size=18)
 
-
-def sidebar_item(text: str, url: str) -> rx.Component:
-    """Sidebar item.
-
-    Args:
-        text: The text of the item.
-        url: The URL of the item.
-
-    Returns:
-        rx.Component: The sidebar item component.
-
-    """
-    # Whether the item is active.
+def sidebarItem(text: str, url: str) -> rx.Component:
+    """sidebarItem"""
     active = (rx.State.router.page.path == url.lower()) | (
         (rx.State.router.page.path == "/") & text == "Overview"
     )
@@ -81,39 +61,23 @@ def sidebar_item(text: str, url: str) -> rx.Component:
         rx.hstack(
             rx.match(
                 text,
-                ("Dashboard", sidebar_item_icon("layout-dashboard")),
-                ("About", sidebar_item_icon("book-open")),
-                ("Settings", sidebar_item_icon("settings")),
-                sidebar_item_icon("layout-dashboard"),
+                ("Dashboard", sidebarItemIcon("layout-dashboard")),
+                ("About", sidebarItemIcon("book-open")),
+                ("Settings", sidebarItemIcon("settings")),
+                sidebarItemIcon("layout-dashboard"),
             ),
             rx.text(text, size="3", weight="regular"),
-            color=rx.cond(
-                active,
-                styles.accent_text_color,
-                styles.text_color,
-            ),
+            color=rx.cond(active, styles.accentTextColor, styles.textColor),
             style={
                 "_hover": {
-                    "background_color": rx.cond(
-                        active,
-                        styles.accent_bg_color,
-                        styles.gray_bg_color,
-                    ),
-                    "color": rx.cond(
-                        active,
-                        styles.accent_text_color,
-                        styles.text_color,
-                    ),
+                    "background_color": rx.cond(active, styles.accentBgColor, styles.grayBgColor),
+                    "color": rx.cond(active, styles.accentTextColor, styles.textColor),
                     "opacity": "1",
                 },
-                "opacity": rx.cond(
-                    active,
-                    "1",
-                    "0.95",
-                ),
+                "opacity": rx.cond(active, "1", "0.95"),
             },
             align="center",
-            border_radius=styles.border_radius,
+            border_radius=styles.borderRadius,
             width="100%",
             spacing="2",
             padding="0.35em",
@@ -123,56 +87,53 @@ def sidebar_item(text: str, url: str) -> rx.Component:
         width="100%",
     )
 
-
 def sidebar() -> rx.Component:
-    # Získáme všechny stránky, které mají dekorátor
+    """sidebar"""
     pages = get_decorated_pages()
 
-    # Seřadíme stránky podle jejich route
-    ordered_page_routes = [
+    orderedPageRoutes = [
         "/",
         "/about",
         "/settings",
     ]
 
-    # Seřazení stránek podle definovaných cest
-    ordered_pages = sorted(
+    orderedPages = sorted(
         pages,
         key=lambda page: (
-            ordered_page_routes.index(page["route"])
-            if page["route"] in ordered_page_routes
-            else len(ordered_page_routes)
+            orderedPageRoutes.index(page["route"])
+            if page["route"] in orderedPageRoutes
+            else len(orderedPageRoutes)
         ),
     )
 
     return rx.flex(
         rx.vstack(
-            sidebar_header(),
+            sidebarHeader(),
             rx.vstack(
                 *[
-                    sidebar_item(
+                    sidebarItem(
                         text=page.get("title", page["route"].strip("/").capitalize()),
                         url=page["route"],
                     )
-                    for page in ordered_pages
+                    for page in orderedPages
                 ],
                 spacing="1",
                 width="100%",
             ),
             rx.spacer(),
-            sidebar_footer(),
-            justify="start",  # Zarovnáme obsah od začátku
-            align="start",  # Zarovnáme obsah od začátku
-            width=styles.sidebar_content_width,
+            sidebarFooter(),
+            justify="start",
+            align="start",
+            width=styles.sidebarContentWidth,
             height="100dvh",
-            padding="1em",  # Zajistíme, že padding není příliš velký
+            padding="1em",
         ),
         display=["none", "none", "none", "none", "none", "flex"],
         max_width="15em",
         width="auto",
         height="100%",
         position="sticky",
-        justify="start",  # Ujistíme se, že sidebar je zarovnaný vlevo
+        justify="start",
         top="0px",
         left="0px",
         flex="1",

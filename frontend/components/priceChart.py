@@ -1,6 +1,6 @@
 import reflex as rx
 from datetime import datetime, timedelta
-from backend.database import get_db
+from backend.database import getDb
 from ..components.card import card
 from .. import styles
 
@@ -11,7 +11,7 @@ class PriceChartState(rx.State):
 
     def fetchData(self):
         """Načítá data z databáze pro graf ceny elektřiny."""
-        conn = get_db()
+        conn = getDb()
         cursor = conn.cursor()
         query = """
             SELECT hodina+1, cena, mnozstvi
@@ -27,7 +27,7 @@ class PriceChartState(rx.State):
 
     def shiftDay(self, direction: str):
         """Posune datum vpřed nebo vzad jen na dny s dostupnými daty."""
-        conn = get_db()
+        conn = getDb()
         cursor = conn.cursor()
 
         if direction == "next":
@@ -63,9 +63,9 @@ def priceChart():
             rx.vstack(
                 # 🔄 Navigace šipkami pro přepínání dnů
                 rx.hstack(
-                    rx.button(rx.icon("chevron-left"), on_click=lambda: PriceChartState.shiftDay("prev"), style=styles.button_style),
+                    rx.button(rx.icon("chevron-left"), on_click=lambda: PriceChartState.shiftDay("prev"), style=styles.buttonStyle),
                     rx.text(PriceChartState.currentDate),
-                    rx.button(rx.icon("chevron-right"), on_click=lambda: PriceChartState.shiftDay("next"), style=styles.button_style),
+                    rx.button(rx.icon("chevron-right"), on_click=lambda: PriceChartState.shiftDay("next"), style=styles.buttonStyle),
                     spacing="4",
                 ),
 

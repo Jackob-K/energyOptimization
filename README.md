@@ -15,7 +15,7 @@ MojeAplikace
 │  ├─ uploads
 │  └─ usagePrediction
 │     ├─ Models
-│     │  ├─ xgboost_metrics.pkl
+│     │  ├─ model_metrics.pkl
 │     │  └─ xgboost_model.pkl
 │     ├─ __init__.py
 │     ├─ dataProcessor.py
@@ -24,7 +24,6 @@ MojeAplikace
 ├─ frontend
 │  ├─ components
 │  │  ├─ card.py
-│  │  ├─ charts.py
 │  │  ├─ mainChart.py
 │  │  ├─ navbar.py
 │  │  ├─ priceChart.py
@@ -36,7 +35,6 @@ MojeAplikace
 │  │  ├─ __init__.py
 │  │  ├─ dashboard.py
 │  │  ├─ datafeed.py
-│  │  ├─ holduj.txt
 │  │  └─ settings.py
 │  ├─ styles.py
 │  └─ templates

@@ -1,21 +1,51 @@
-import logging
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-import database
-import pandas as pd
+"""
+API modul pro práci s fotovoltaickými panely, zpracování nahraných souborů,
+správu MQTT nastavení a komunikaci s databází.
+
+Vstup: JSON data pro FVE panely, soubory s historickými daty (CSV, XLSX).
+Výstup: Aktualizovaná databáze, odpovědi na API požadavky.
+Spolupracuje s: database, mqttListener.
+
+Změny názvů funkcí a proměnných:
+- get_mqtt_settings → getMqttSettings
+- save_mqtt_settings → saveMqttSettings
+- test_mqtt_connection → testMqttConnection
+- upload_file → uploadFile
+- process_uploaded_file → processUploadedFile
+- import_settings → importSettings
+- get_settings → getSettings
+"""
+
+# Standardní knihovny
 import os
 import base64
+import logging
+
+# Externí knihovny
+import pandas as pd
 import httpx
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from typing import List, Optional
+
+# Lokální importy
+import database
 import mqttListener
 
-# ✅ Nastavení loggeru
+# Logger
 logger = logging.getLogger(__name__)
 
+# FastAPI router
 router = APIRouter()
 
-class FVEData(BaseModel):
-    id: Optional[int] = None  # ✅ Volitelné ID panelu
+# Povinné sloupce v souboru
+requiredColumns = {"date", "hour", "consumption", "temperature", "fveProduction"}
+uploadDir = "uploads"
+os.makedirs(uploadDir, exist_ok=True)
+
+class FveData(BaseModel):
+    """FveData"""
+    id: Optional[int] = None
     latitude: float
     longitude: float
     tilt: float
@@ -23,33 +53,29 @@ class FVEData(BaseModel):
     power: float
 
 class SolarParams(BaseModel):
-    fve_fields: List[FVEData]  # ✅ Seznam panelů FVE
-
-# ✅ Povinné sloupce v souboru
-REQUIRED_COLUMNS = {"date", "hour", "consumption", "temperature", "fveProduction"}
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+    """SolarParams"""
+    fveFields: List[FveData]
 
 class FileUploadModel(BaseModel):
+    """FileUploadModel"""
     filename: str
-    filedata: str  # Base64 encoded file content
+    filedata: str
 
 @router.post("/upload/")
-async def upload_file(file: FileUploadModel):
-    """Nahraje soubor do složky a automaticky spustí jeho zpracování."""
-    file_location = os.path.join(UPLOAD_DIR, file.filename)
+async def uploadFile(file: FileUploadModel):
+    """uploadFile"""
+    fileLocation = os.path.join(uploadDir, file.filename)
     
-    file_content = base64.b64decode(file.filedata)
-    with open(file_location, "wb") as buffer:
-        buffer.write(file_content)
+    fileContent = base64.b64decode(file.filedata)
+    with open(fileLocation, "wb") as buffer:
+        buffer.write(fileContent)
 
-    logger.info(f"✅ Soubor {file.filename} nahrán do {file_location}")
+    logger.info(f"✅ Soubor {file.filename} nahrán do {fileLocation}")
 
-    # ✅ Opravené volání API na `process-file`
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://127.0.0.1:8000/process-file/",
-            json={"file_location": file_location}  # Posíláme jako JSON objekt
+            json={"fileLocation": fileLocation}
         )
 
     if response.status_code == 200:
@@ -60,40 +86,39 @@ async def upload_file(file: FileUploadModel):
     return response.json()
 
 class ProcessFileModel(BaseModel):
-    file_location: str
+    """ProcessFileModel"""
+    fileLocation: str
 
 @router.post("/process-file/")
-async def process_uploaded_file(payload: ProcessFileModel):
-    """Zpracuje soubor, ověří správnost a uloží do databáze."""
-    file_location = payload.file_location
+async def processUploadedFile(payload: ProcessFileModel):
+    """processUploadedFile"""
+    fileLocation = payload.fileLocation
 
-    if not os.path.exists(file_location):
-        raise HTTPException(status_code=400, detail=f"❌ Soubor nebyl nalezen: {file_location}")
+    if not os.path.exists(fileLocation):
+        raise HTTPException(status_code=400, detail=f"❌ Soubor nebyl nalezen: {fileLocation}")
 
-    logger.info(f"🔄 Zpracovávám soubor: {file_location}")
+    logger.info(f"🔄 Zpracovávám soubor: {fileLocation}")
 
     try:
-        if file_location.endswith(".csv"):
-            df = pd.read_csv(file_location)
-        elif file_location.endswith(".xlsx"):
-            df = pd.read_excel(file_location)
+        if fileLocation.endswith(".csv"):
+            df = pd.read_csv(fileLocation)
+        elif fileLocation.endswith(".xlsx"):
+            df = pd.read_excel(fileLocation)
         else:
             raise HTTPException(status_code=400, detail="Nepodporovaný formát souboru")
         
-        if not REQUIRED_COLUMNS.issubset(df.columns):
-            missing_columns = REQUIRED_COLUMNS - set(df.columns)
-            raise HTTPException(status_code=400, detail=f"❌ Chybějící sloupce: {', '.join(missing_columns)}")
+        if not requiredColumns.issubset(df.columns):
+            missingColumns = requiredColumns - set(df.columns)
+            raise HTTPException(status_code=400, detail=f"❌ Chybějící sloupce: {', '.join(missingColumns)}")
 
         df["date"] = pd.to_datetime(df["date"]).dt.date  
         df["hour"] = df["hour"].fillna(24).astype(int)
 
         df = df[["date", "hour", "fveProduction", "consumption", "temperature"]]
         
-        # ✅ Uložení dat do databáze
-        database.save_historical_data(df)
+        database.saveHistoricalData(df)
 
-        # ✅ Smazání souboru po zpracování
-        os.remove(file_location)
+        os.remove(fileLocation)
 
         return {"message": "✅ Data byla úspěšně nahrána a uložena!"}
 
@@ -101,12 +126,11 @@ async def process_uploaded_file(payload: ProcessFileModel):
         raise HTTPException(status_code=500, detail=f"❌ Chyba při zpracování: {str(e)}")
 
 @router.post("/import-settings/")
-async def import_settings(solar_params: SolarParams):
-    """Uloží nastavení FVE a panely do databáze."""
-
+async def importSettings(solar_params: SolarParams):
+    """importSettings"""
     updated_panels = []
-    for fve in solar_params.fve_fields:
-        panel_id = database.save_fve_panel(
+    for fve in solar_params.fveFields:
+        panel_id = database.saveFvePanel(
             panel_id=fve.id if fve.id is not None else None,
             latitude=fve.latitude,
             longitude=fve.longitude,
@@ -119,38 +143,35 @@ async def import_settings(solar_params: SolarParams):
     return {"message": "✅ Parametry FVE byly úspěšně uloženy", "saved_panels": updated_panels}
 
 @router.get("/get-settings/")
-async def get_settings():
-    """Vrací uložené parametry FVE zpět do UI."""
-    data = database.get_fve_data()
+async def getSettings():
+    """getSettings"""
+    data = database.getFveData()
     return data
 
-# ✅ Model pro MQTT nastavení
-class MQTTSettingsModel(BaseModel):
+class MqttSettingsModel(BaseModel):
+    """MqttSettingsModel"""
     broker: str
     port: int
     topic: str
     username: str
     password: str
 
-
 @router.get("/get-mqtt-settings/")
-def get_mqtt_settings():
-    """Vrátí aktuální uložené MQTT nastavení."""
-    return mqttListener.get_mqtt_settings()  # Teď je to správně synchronní
-
+def getMqttSettings():
+    """getMqttSettings"""
+    return mqttListener.getMqttSettings()
 
 @router.post("/save-mqtt-settings/")
-async def save_mqtt_settings(data: MQTTSettingsModel):
-    """Uloží nové MQTT nastavení do databáze."""
+async def saveMqttSettings(data: MqttSettingsModel):
+    """saveMqttSettings"""
     try:
-        mqttListener.save_mqtt_settings(data.dict())
+        mqttListener.saveMqttSettings(data.dict())
         return {"message": "✅ MQTT nastavení bylo uloženo"}
     except Exception as e:
         logger.error(f"❌ Chyba při ukládání MQTT nastavení: {e}")
         raise HTTPException(status_code=500, detail="Chyba při ukládání")
 
-
 @router.post("/test-mqtt-connection/")
-async def test_mqtt_connection(data: MQTTSettingsModel):
-    """Otestuje připojení k MQTT brokeru."""
-    return mqttListener.test_mqtt_connection(data.dict())
+async def testMqttConnection(data: MqttSettingsModel):
+    """testMqttConnection"""
+    return mqttListener.testMqttConnection(data.dict())

@@ -1,33 +1,58 @@
+"""
+Program načte předzpracovaná data z databáze, ověří existenci chybějících predikcí,
+doplní chybějící predikce pomocí uloženého XGBoost modelu a uloží výsledné predikce
+spotřeby energie zpět do databáze energyData.
+
+Vstup: data z databáze processedData, uložený model (xgboost_model.pkl)
+Výstup: aktualizované predikce v databázi energyData (sloupec consumptionPredicted)
+Spolupracuje s: backend.database.getDb, backend.usagePrediction.dataProcessor
+"""
+# Externí knihovny
 import joblib
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from backend.database import get_db
-from backend.usagePrediction.dataProcessor import add_temperature_features
 
-def load_model(model_path="backend/usagePrediction/Models/xgboost_model.pkl"):
-    """Načte trénovaný model."""
-    return joblib.load(model_path)
+# Lokální importy
+from backend.database import getDb
 
-def check_existing_predictions():
-    """Zjistí, zda jsou v databázi chybějící predikce a zda je třeba je doplnit."""
-    with get_db() as conn:
+def loadModel(modelPath="backend/usagePrediction/Models/xgboost_model.pkl"):
+    """loadModel"""
+    return joblib.load(modelPath)
+
+def checkExistingPredictions():
+    """checkExistingPredictions"""
+    with getDb() as conn:
         cursor = conn.cursor()
+        
+        # Výpis prvních 10 hodnot pro kontrolu
         cursor.execute("""
-            SELECT MIN(date) FROM energyData WHERE consumptionPredicted IS NULL;
+            SELECT MIN(date) FROM energyData 
+            WHERE consumptionPredicted IS NULL 
+            AND hour < 24;
         """)
-        first_missing_date = cursor.fetchone()[0]
+        results = cursor.fetchall()
+        print("🔍 Kontrola hodnot v databázi:")
+        for row in results:
+            print(row)
 
-    if first_missing_date is not None:
-        print(f"✅ Chybí predikce od {first_missing_date}, budeme je generovat.")
-        return first_missing_date  # Vrátíme první chybějící datum
+        # Kontrola chybějících predikcí
+        cursor.execute("""
+            SELECT MIN(date) FROM energyData 
+            WHERE consumptionPredicted IS NULL 
+            AND hour < 24;
+        """)
+        firstMissingDate = cursor.fetchone()[0]
+
+    if firstMissingDate is not None:
+        print(f"✅ Chybí predikce od {firstMissingDate}, budeme je generovat.")
+        return firstMissingDate
     else:
         print("✅ Všechny historické predikce jsou doplněny, není třeba generovat nové.")
-        return None  # Predikce už jsou kompletní
+        return None
 
-def get_processed_data():
-    """Načte zpracovaná data z `processedData` pro predikci a převede typy."""
-    with get_db() as conn:
+
+def getProcessedData():
+    """getProcessedData"""
+    with getDb() as conn:
         query = """
         SELECT date, hour, month, day_of_week, is_weekend,
                consumption_lag_1, consumption_lag_2, consumption_lag_3, consumption_lag_24,
@@ -35,78 +60,77 @@ def get_processed_data():
                temperature, temperature_lag_1, temperature_lag_2, temperature_lag_3, temperature_lag_24,
                temperature_roll_3h, temperature_roll_6h, temperature_roll_12h, temperature_roll_24h
         FROM processedData
-        WHERE hour < 24  -- ✅ Načteme všechna historická data, nejen týden dopředu
+        WHERE hour < 24
         ORDER BY date, hour;
         """
-        df = pd.read_sql_query(query, conn)
+        processedDf = pd.read_sql_query(query, conn)
 
-    # ✅ Oprava: Převod `date` zpět na `datetime`
-    df["date"] = pd.to_datetime(df["date"])
+    processedDf["date"] = pd.to_datetime(processedDf["date"])
 
-    # ✅ Převod číselných sloupců na `float`
-    cols_to_convert = [
+    numericCols = [
         "consumption_lag_1", "consumption_lag_2", "consumption_lag_3", "consumption_lag_24",
         "consumption_roll_3h", "consumption_roll_6h", "consumption_roll_12h", "consumption_roll_24h",
         "temperature", "temperature_lag_1", "temperature_lag_2", "temperature_lag_3", "temperature_lag_24",
         "temperature_roll_3h", "temperature_roll_6h", "temperature_roll_12h", "temperature_roll_24h"
     ]
-    df[cols_to_convert] = df[cols_to_convert].apply(pd.to_numeric, errors="coerce")
+    processedDf[numericCols] = processedDf[numericCols].apply(pd.to_numeric, errors="coerce")
 
-    print("📊 Datové typy po opravě:\n", df.dtypes)
+    print("📊 Datové typy po opravě:\n", processedDf.dtypes)
 
-    return df
+    return processedDf
 
-def save_predictions_to_db(predictions, processed_df):
-    """Uloží predikce do databáze se zaokrouhlením na dvě desetinná místa."""
-    with get_db() as conn:
+def savePredictionsToDb(predictions, processedDf):
+    """savePredictionsToDb"""
+    with getDb() as conn:
         cursor = conn.cursor()
         for i, prediction in enumerate(predictions):
-            date_str = processed_df.iloc[i]["date"].strftime("%Y-%m-%d")  # ✅ Převod na string
-            hour = int(processed_df.iloc[i]["hour"])  # ✅ Převod na integer
-            rounded_prediction = round(float(prediction), 2)  # ✅ Zaokrouhlení na dvě desetinná místa
+            dateStr = processedDf.iloc[i]["date"].strftime("%Y-%m-%d")
+            hour = int(processedDf.iloc[i]["hour"])
+            roundedPrediction = round(float(prediction), 2)
 
-            print(f"Ukládám predikci: {date_str} {hour}:00 → {rounded_prediction:.2f}")  # ✅ Debugging výstup
+            print(f"Ukládám predikci: {dateStr} {hour}:00 → {roundedPrediction:.2f}")
 
             query = """
             UPDATE energyData
             SET consumptionPredicted = ?
             WHERE date(date) = date(?) AND hour = ?;
             """
-            cursor.execute(query, (rounded_prediction, date_str, hour))
+            cursor.execute(query, (roundedPrediction, dateStr, hour))
 
         conn.commit()
         print("✅ Všechny predikce byly uloženy do databáze se zaokrouhlením na 2 desetinná místa!")
 
-
-
 if __name__ == "__main__":
-    # ✅ Zjistíme první den, kde chybí predikce
-    first_missing_date = check_existing_predictions()
+    # Zjistíme první den, kde chybí predikce
+    firstMissingDate = checkExistingPredictions()
 
-    if first_missing_date is not None:
-        # ✅ Načtení zpracovaných dat z `processedData`
-        processed_df = get_processed_data()
-        if processed_df is None or processed_df.empty:
+    if firstMissingDate is not None:
+        # Načtení zpracovaných dat z `processedData`
+        processedDf = getProcessedData()
+        
+        if processedDf is None or processedDf.empty:
             print("❌ Nelze provést predikci: Chybí vstupní data v `processedData`!")
         else:
-            # ✅ Načtení modelu
-            model = load_model()
+            # Načtení modelu
+            model = loadModel()
 
-            # ✅ Ověření správného pořadí sloupců
-            expected_columns = model.get_booster().feature_names
-            print("✅ Model očekává tyto sloupce:", expected_columns)
+            # Ověření správného pořadí sloupců
+            expectedColumns = model.get_booster().feature_names
+            print("✅ Model očekává tyto sloupce:", expectedColumns)
 
-            # ✅ Odfiltrujeme pouze data od `first_missing_date`, ale `date` zachováme!
-            processed_df = processed_df[processed_df["date"] >= first_missing_date]
+            # Odfiltrujeme pouze data od `firstMissingDate`, ale `date` zachováme!
+            processedDf = processedDf[processedDf["date"] >= firstMissingDate]
 
-            # ✅ Seřadíme sloupce podle trénovacích dat modelu (bez odstranění `date`)
-            model_input = processed_df[expected_columns]
+            # Seřadíme sloupce podle trénovacích dat modelu (bez odstranění `date`)
+            modelInput = processedDf[expectedColumns]
 
-            # ✅ Provádění predikce
-            predictions = model.predict(model_input)
+            # Provádění predikce
+            predictions = model.predict(modelInput)
 
-            # ✅ Uložení predikcí do databáze
+            # Uložení predikcí do databáze
             print("📊 Prvních 10 predikcí:", predictions[:10])
-            save_predictions_to_db(predictions, processed_df)
+            savePredictionsToDb(predictions, processedDf)
 
             print("✅ Předpověď spotřeby byla doplněna od prvního chybějícího data až do dneška +7 dní.")
+    else:
+        print("✅ Žádná predikce nechybí. Není třeba nic aktualizovat.")

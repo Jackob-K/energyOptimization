@@ -1,25 +1,28 @@
-"""Common templates used between pages in the app."""
+"""
+Modul pro šablony společné pro stránky aplikace.
+
+Vstup: Konfigurace šablon stránek (route, title, meta, script tags).
+Výstup: Stylizovaná stránka s navigací, postranním panelem a obsahem.
+Spolupracuje s: Reflex (UI framework), frontend.styles (styly), navbar, sidebar.
+"""
 
 from __future__ import annotations
-
 from typing import Callable
-
 import reflex as rx
-
 from .. import styles
 from ..components.navbar import navbar
 from ..components.sidebar import sidebar
 
-# Meta tags for the app.
-default_meta = [
+# ✅ Meta tagy pro aplikaci
+defaultMeta = [
     {
         "name": "viewport",
         "content": "width=device-width, shrink-to-fit=no, initial-scale=1",
     },
 ]
 
-
-def menu_item_link(text, href):
+def menuItemLink(text, href):
+    """menuItemLink"""
     return rx.menu.item(
         rx.link(
             text,
@@ -28,79 +31,51 @@ def menu_item_link(text, href):
             color="inherit",
         ),
         _hover={
-            "color": styles.accent_color,
-            "background_color": styles.accent_text_color,
+            "color": styles.accentColor,
+            "background_color": styles.accentTextColor,
         },
     )
 
-
 class ThemeState(rx.State):
-    """The state for the theme of the app."""
-
-    accent_color: str = "blue"
-
-    gray_color: str = "gray"
-
+    """ThemeState"""
+    accentColor: str = "blue"
+    grayColor: str = "gray"
     radius: str = "large"
-
     scaling: str = "100%"
-
 
 def template(
     route: str | None = None,
     title: str | None = None,
     description: str | None = None,
     meta: str | None = None,
-    script_tags: list[rx.Component] | None = None,
+    scriptTags: list[rx.Component] | None = None,
     on_load: rx.EventHandler | list[rx.EventHandler] | None = None,
 ) -> Callable[[Callable[[], rx.Component]], rx.Component]:
-    """The template for each page of the app.
+    """template"""
 
-    Args:
-        route: The route to reach the page.
-        title: The title of the page.
-        description: The description of the page.
-        meta: Additional meta to add to the page.
-        on_load: The event handler(s) called when the page load.
-        script_tags: Scripts to attach to the page.
+    def decorator(pageContent: Callable[[], rx.Component]) -> rx.Component:
+        """decorator"""
+        allMeta = [*defaultMeta, *(meta or [])]
 
-    Returns:
-        The template with the page content.
-
-    """
-
-    def decorator(page_content: Callable[[], rx.Component]) -> rx.Component:
-        """The template for each page of the app.
-
-        Args:
-            page_content: The content of the page.
-
-        Returns:
-            The template with the page content.
-
-        """
-        # Get the meta tags for the page.
-        all_meta = [*default_meta, *(meta or [])]
-
-        def templated_page():
+        def templatedPage():
             return rx.flex(
                 navbar(),
                 sidebar(),
                 rx.flex(
                     rx.vstack(
-                        page_content(),
+                        pageContent(),
                         width="100%",
-                        **styles.template_content_style,
+                        **styles.templateContentStyle,
                     ),
                     width="100%",
-                    **styles.template_page_style,
+                    **styles.templatePageStyle,
                     max_width=[
                         "100%",
                         "100%",
                         "100%",
                         "100%",
                         "100%",
-                        styles.max_width,
+                        styles.maxWidth,
                     ],
                 ),
                 flex_direction=[
@@ -120,20 +95,20 @@ def template(
             route=route,
             title=title,
             description=description,
-            meta=all_meta,
-            script_tags=script_tags,
+            meta=allMeta,
+            script_tags=scriptTags,
             on_load=on_load,
         )
-        def theme_wrap():
+        def themeWrap():
             return rx.theme(
-                templated_page(),
+                templatedPage(),
                 has_background=True,
-                accent_color=ThemeState.accent_color,
-                gray_color=ThemeState.gray_color,
+                accent_color=ThemeState.accentColor,
+                gray_color=ThemeState.grayColor,
                 radius=ThemeState.radius,
                 scaling=ThemeState.scaling,
             )
 
-        return theme_wrap
+        return themeWrap
 
     return decorator

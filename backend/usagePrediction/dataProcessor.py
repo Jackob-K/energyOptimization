@@ -1,10 +1,21 @@
+"""
+Program načítá historická data spotřeby energie a teploty z databáze,
+vytváří doplňkové atributy (lagy, klouzavé průměry, časové atributy)
+a připravuje data pro trénování ML modelu nebo je aktualizuje zpět do databáze.
+
+Vstup: Data z databáze energyData
+Výstup: Upravená data (X_train, X_test, y_train, y_test) nebo aktualizovaná tabulka processedData
+Spolupracuje s: backend.database.getDb
+"""
+
 import pandas as pd
 import numpy as np
-from backend.database import get_db
+from backend.database import getDb
 
-def get_historical_data():
-    """Načte historická data z databáze a zajistí správné datové typy."""
-    with get_db() as conn:
+
+def getHistoricalData():
+    """getHistoricalData"""
+    with getDb() as conn:
         query = """
         SELECT date, hour, consumption, temperature
         FROM energyData
@@ -13,107 +24,95 @@ def get_historical_data():
         """
         df = pd.read_sql_query(query, conn)
 
-    # ✅ Oprava typů – všechny hodnoty převedeme na čísla
     df["consumption"] = pd.to_numeric(df["consumption"], errors="coerce")
     df["temperature"] = pd.to_numeric(df["temperature"], errors="coerce")
-
-    df["date"] = pd.to_datetime(df["date"])  # Převod datumu na datetime
-    df["year"] = df["date"].dt.year  # Přidání sloupce s rokem
+    df["date"] = pd.to_datetime(df["date"])
+    df["year"] = df["date"].dt.year
 
     return df
 
-def add_lag_features(df, lags=[1, 2, 3, 24]):
-    """Přidá posunuté (lag) hodnoty spotřeby."""
+
+def addLagFeatures(df, lags=[1, 2, 3, 24]):
+    """addLagFeatures"""
     for lag in lags:
         df[f"consumption_lag_{lag}"] = df["consumption"].shift(lag)
     return df
 
-def add_rolling_features(df, window_sizes=[3, 6, 12, 24]):
-    """Přidá klouzavé průměry spotřeby."""
-    for window in window_sizes:
+
+def addRollingFeatures(df, windowSizes=[3, 6, 12, 24]):
+    """addRollingFeatures"""
+    for window in windowSizes:
         df[f"consumption_roll_{window}h"] = df["consumption"].rolling(window=window, min_periods=1).mean()
     return df
 
-def add_temperature_features(df, lags=[1, 2, 3, 24], window_sizes=[3, 6, 12, 24]):
-    """Přidá lagy a klouzavé průměry teploty."""
+
+def addTemperatureFeatures(df, lags=[1, 2, 3, 24], windowSizes=[3, 6, 12, 24]):
+    """addTemperatureFeatures"""
     for lag in lags:
         df[f"temperature_lag_{lag}"] = df["temperature"].shift(lag)
 
-    for window in window_sizes:
+    for window in windowSizes:
         df[f"temperature_roll_{window}h"] = df["temperature"].rolling(window=window, min_periods=1).mean()
-
     return df
 
-def add_time_features(df):
-    """Přidá časové proměnné (den v týdnu, měsíc, pracovní den)."""
+
+def addTimeFeatures(df):
+    """addTimeFeatures"""
     df["month"] = df["date"].dt.month
     df["day_of_week"] = df["date"].dt.weekday
     df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
     return df
 
-def handle_missing_values(df):
-    """Vyplní chybějící hodnoty lineární interpolací."""
+
+def handleMissingValues(df):
+    """handleMissingValues"""
     df.interpolate(method="linear", inplace=True)
     return df
 
-def prepare_train_test_data():
-    """Připraví data pro trénování modelu ML s dělením podle roku."""
-    df = get_historical_data()
 
-    # ✅ Přidáme feature engineering prvky
-    df = add_lag_features(df)
-    df = add_rolling_features(df)
-    df = add_temperature_features(df)
-    df = add_time_features(df)
+def prepareTrainTestData():
+    """prepareTrainTestData"""
+    df = getHistoricalData()
+    df = addLagFeatures(df)
+    df = addRollingFeatures(df)
+    df = addTemperatureFeatures(df)
+    df = addTimeFeatures(df)
 
-    # ✅ Odstraníme řádky s NaN hodnotami (způsobené lagy)
     df.dropna(inplace=True)
 
-    # ✅ Vybereme relevantní proměnné
     features = [col for col in df.columns if col not in ["date", "consumption", "year"]]
     X = df[features]
     y = df["consumption"]
 
-    # ✅ Rozdělení trénovacích a testovacích dat podle roku
-    X_train = X[df["year"] < 2025]  # Trénujeme na všech datech před 2025
-    y_train = y[df["year"] < 2025]
-    X_test = X[df["year"] == 2025]  # Testujeme na datech z roku 2025
-    y_test = y[df["year"] == 2025]
+    XTrain = X[df["year"] < 2025]
+    yTrain = y[df["year"] < 2025]
+    XTest = X[df["year"] == 2025]
+    yTest = y[df["year"] == 2025]
 
-    print(f"✅ Data připravena! Trénovací sada: {X_train.shape}, Testovací sada: {X_test.shape}")
-    print(f"📌 Chybějící hodnoty po opravě:\n{X_train.isnull().sum()}")
+    print(f"Data připravena! Trénovací sada: {XTrain.shape}, Testovací sada: {XTest.shape}")
+    print(f"Chybějící hodnoty po opravě:\n{XTrain.isnull().sum()}")
 
-    return X_train, X_test, y_train, y_test
+    return XTrain, XTest, yTrain, yTest
 
-import pandas as pd
-from backend.database import get_db
 
-def update_processed_data():
-    """Načte data z energyData, provede výpočty, zaokrouhlí je a uloží do processedData."""
-    with get_db() as conn:
-        # 1️⃣ Načíst data z `energyData`
+def updateProcessedData():
+    """updateProcessedData"""
+    with getDb() as conn:
         query = """
         SELECT date, hour, consumption, temperature
         FROM energyData
-        WHERE hour < 24  -- Nebereme souhrnnou hodinu 24
-        ORDER BY date, hour;
+        WHERE hour < 24
+        ORDER BY date, hour
         """
         df = pd.read_sql_query(query, conn)
 
-    # 2️⃣ Převést `date` na datetime formát
     df["date"] = pd.to_datetime(df["date"])
 
-    # 3️⃣ Přidat lagy a klouzavé průměry
-    df = add_lag_features(df)
-    df = add_rolling_features(df)
-    df = add_temperature_features(df)
+    df = addLagFeatures(df)
+    df = addRollingFeatures(df)
+    df = addTemperatureFeatures(df)
+    df = addTimeFeatures(df)
 
-    # 4️⃣ Přidat časové proměnné
-    df["month"] = df["date"].dt.month
-    df["day_of_week"] = df["date"].dt.weekday
-    df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
-
-    # 5️⃣ Vyplnit chybějící hodnoty (backfill pro lagy)
     df.bfill(inplace=True)
 
     # 6️⃣ **Zaokrouhlení hodnot**
@@ -126,7 +125,7 @@ def update_processed_data():
     })
 
     # 7️⃣ Uložit data do `processedData`
-    with get_db() as conn:
+    with getDb() as conn:
         cursor = conn.cursor()
         for _, row in df.iterrows():
             query = """
@@ -173,5 +172,5 @@ def update_processed_data():
         conn.commit()
 
 if __name__ == "__main__":
-    update_processed_data()
+    updateProcessedData()
     print("✅ Tabulka processedData byla úspěšně aktualizována!")

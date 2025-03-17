@@ -1,25 +1,45 @@
-import paho.mqtt.client as mqtt
-import json
+"""
+Modul pro správu MQTT připojení a příjem dat.
+
+Vstup: MQTT zprávy s údaji o spotřebě a výrobě energie.
+Výstup: Data uložená v databázi.
+Spolupracuje s: database.
+
+Změny názvů funkcí a proměnných:
+- load_settings → loadSettings
+- save_mqtt_settings → saveMqttSettings
+- test_mqtt_connection → testMqttConnection
+- restart_mqtt_client → restartMqttClient
+- on_connect → onConnect
+- on_message → onMessage
+- save_to_database → saveToDatabase
+- on_disconnect → onDisconnect
+"""
+
+# Standardní knihovny
 import logging
+import json
 import sqlite3
+
+# Externí knihovny
+import paho.mqtt.client as mqtt
 from fastapi import APIRouter, HTTPException
-from database import get_db
 
-# Nastavení logování
+# Lokální importy
+from database import getDb
+
+# Logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# Cesta k databázi
-DB_PATH = "backend/database.db"
 
 # API router pro MQTT služby
 router = APIRouter()
 
 # Globální proměnné pro MQTT klienta
-mqtt_client = None
+mqttClient = None
 settings = {}
 
-def load_settings():
-    """ Načítá aktuální MQTT nastavení z databáze """
+def loadSettings():
+    """loadSettings"""
     global settings
     settings = {
         "broker": "test.mosquitto.org",
@@ -30,21 +50,21 @@ def load_settings():
     }
 
     try:
-        with get_db() as db:
+        with getDb() as db:
             cursor = db.cursor()
             cursor.execute("SELECT id, value FROM settings WHERE id BETWEEN 11 AND 15")
             rows = cursor.fetchall()
 
-            for row_id, value in rows:
-                if row_id == 11:
+            for rowId, value in rows:
+                if rowId == 11:
                     settings["broker"] = value
-                elif row_id == 12:
+                elif rowId == 12:
                     settings["port"] = int(value) if value.isdigit() else 1883
-                elif row_id == 13:
+                elif rowId == 13:
                     settings["topic"] = value
-                elif row_id == 14:
+                elif rowId == 14:
                     settings["username"] = value if value else None
-                elif row_id == 15:
+                elif rowId == 15:
                     settings["password"] = value if value else None
 
     except sqlite3.Error as e:
@@ -52,19 +72,19 @@ def load_settings():
 
     return settings
 
-def save_mqtt_settings(new_settings):
-    """ Uloží nové MQTT nastavení do databáze a restartuje připojení pouze pokud došlo ke změně """
+def saveMqttSettings(newSettings):
+    """saveMqttSettings"""
     global settings
-    if settings == new_settings:
+    if settings == newSettings:
         logging.info("⚠️ Nastavení MQTT se nezměnilo, restart není nutný.")
         return {"message": "⚠️ Nastavení zůstalo stejné."}
 
     try:
-        with get_db() as db:
+        with getDb() as db:
             cursor = db.cursor()
             
-            for key, value in new_settings.items():
-                setting_id = {
+            for key, value in newSettings.items():
+                settingId = {
                     "broker": 11,
                     "port": 12,
                     "topic": 13,
@@ -72,109 +92,99 @@ def save_mqtt_settings(new_settings):
                     "password": 15
                 }.get(key)
 
-                if setting_id:
-                    # ✅ Použijeme INSERT ON CONFLICT pro správné uložení
+                if settingId:
                     cursor.execute("""
                         INSERT INTO settings (id, value) VALUES (?, ?)
                         ON CONFLICT(id) DO UPDATE SET value = excluded.value;
-                    """, (setting_id, str(value)))
+                    """, (settingId, str(value)))
 
             db.commit()
 
         logging.info("✅ MQTT nastavení bylo úspěšně uloženo")
-        settings = new_settings  # Aktualizujeme globální proměnnou
-        restart_mqtt_client()  # Restartujeme jen při změně
+        settings = newSettings  
+        restartMqttClient()  
         return {"message": "✅ MQTT nastavení bylo uloženo"}
 
     except sqlite3.Error as e:
         logging.error(f"❌ Chyba při ukládání MQTT nastavení: {e}")
         raise HTTPException(status_code=500, detail="Chyba při ukládání do databáze")
 
-
-def test_mqtt_connection(settings_data):
-    """ Otestuje připojení k MQTT brokeru """
+def testMqttConnection(settingsData):
+    """testMqttConnection"""
     try:
-        test_client = mqtt.Client()
-        if settings_data["username"] and settings_data["password"]:
-            test_client.username_pw_set(settings_data["username"], settings_data["password"])
+        testClient = mqtt.Client()
+        if settingsData["username"] and settingsData["password"]:
+            testClient.username_pw_set(settingsData["username"], settingsData["password"])
 
-        test_client.connect(settings_data["broker"], int(settings_data["port"]), 60)
-        test_client.disconnect()
+        testClient.connect(settingsData["broker"], int(settingsData["port"]), 60)
+        testClient.disconnect()
         return {"message": "✅ Připojení k MQTT brokeru úspěšné"}
     
     except Exception as e:
         logging.error(f"❌ Chyba při testování MQTT připojení: {e}")
         return {"message": "❌ Připojení selhalo", "error": str(e)}
 
+def restartMqttClient():
+    """restartMqttClient"""
+    global mqttClient
+    settings = loadSettings()
 
-def restart_mqtt_client():
-    """ Restartuje MQTT klienta s novým nastavením """
-    global mqtt_client
-    settings = load_settings()
+    if mqttClient:
+        mqttClient.disconnect()
 
-    if mqtt_client:
-        mqtt_client.disconnect()
-
-    mqtt_client = mqtt.Client()
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_message = on_message
-    mqtt_client.on_disconnect = on_disconnect
+    mqttClient = mqtt.Client()
+    mqttClient.on_connect = onConnect
+    mqttClient.on_message = onMessage
+    mqttClient.on_disconnect = onDisconnect
 
     if settings["username"] and settings["password"]:
-        mqtt_client.username_pw_set(settings["username"], settings["password"])
+        mqttClient.username_pw_set(settings["username"], settings["password"])
 
     try:
         logging.info("🔄 Restart MQTT klienta s novým nastavením...")
-        mqtt_client.connect(settings["broker"], settings["port"], 60)
-        mqtt_client.loop_start()
+        mqttClient.connect(settings["broker"], settings["port"], 60)
+        mqttClient.loop_start()
     except Exception as e:
         logging.error(f"❌ Chyba při restartování MQTT klienta: {e}")
 
-def on_connect(client, userdata, flags, rc):
-    """ Callback při připojení k brokeru """
+def onConnect(client, userdata, flags, rc):
+    """onConnect"""
     if rc == 0:
         logging.info("✅ MQTT připojeno.")
         client.subscribe(settings["topic"])
     else:
         logging.error(f"❌ Chyba při připojení, kód: {rc}")
 
-def on_message(client, userdata, msg):
-    """ Callback při přijetí zprávy z MQTT """
-    raw_payload = msg.payload.decode("utf-8")  # Převod byte zprávy na string
-    logging.info(f"📩 SUROVÁ PŘIJATÁ ZPRÁVA: {raw_payload}")  # ✅ Výpis raw zprávy
+def onMessage(client, userdata, msg):
+    """onMessage"""
+    rawPayload = msg.payload.decode("utf-8")
+    logging.info(f"📩 SUROVÁ PŘIJATÁ ZPRÁVA: {rawPayload}")
 
-    # 🛠 Pokusíme se extrahovat JSON část ze zprávy
     try:
-        json_start = raw_payload.find("{")  # Najdeme začátek JSONu
-        if json_start != -1:
-            clean_json = raw_payload[json_start:]  # Ořízneme text před JSONem
-        else:
-            clean_json = raw_payload  # Pokud není nalezen '{', použijeme celý text
+        jsonStart = rawPayload.find("{")
+        cleanJson = rawPayload[jsonStart:] if jsonStart != -1 else rawPayload
 
-        logging.info(f"🛠 OPRAVENÁ ZPRÁVA PRO DEKÓDOVÁNÍ: {clean_json}")  # ✅ Výpis opravené zprávy
+        logging.info(f"🛠 OPRAVENÁ ZPRÁVA PRO DEKÓDOVÁNÍ: {cleanJson}")
 
-        # Převedení na Python slovník
-        data = json.loads(clean_json)
+        data = json.loads(cleanJson)
 
-        logging.info(f"📥 PŘEVEDENÁ JSON ZPRÁVA: {json.dumps(data, indent=2)}")  # ✅ Formátovaný výstup JSON
+        logging.info(f"📥 PŘEVEDENÁ JSON ZPRÁVA: {json.dumps(data, indent=2)}")
 
-        # ✅ Ověření, zda zpráva obsahuje požadovaná pole
-        required_keys = {"date", "hour", "fveProduction", "consumption", "temperature"}
-        if required_keys.issubset(data.keys()):
+        requiredKeys = {"date", "hour", "fveProduction", "consumption", "temperature"}
+        if requiredKeys.issubset(data.keys()):
             logging.info("✅ ZPRÁVA OBSAHUJE VŠECHNA POŽADOVANÁ DATA!")
-            save_to_database(data)  # Uložit do DB
+            saveToDatabase(data)
         else:
-            missing_keys = required_keys - set(data.keys())
-            logging.warning(f"⚠️ CHYBĚJÍCÍ DATA VE ZPRÁVĚ: {missing_keys}")
+            missingKeys = requiredKeys - set(data.keys())
+            logging.warning(f"⚠️ CHYBĚJÍCÍ DATA VE ZPRÁVĚ: {missingKeys}")
 
     except json.JSONDecodeError as e:
         logging.error(f"❌ CHYBA PŘI DEKÓDOVÁNÍ JSON: {e}")
 
-
-def save_to_database(data):
-    """ Uložení přijatých dat do tabulky energyData """
+def saveToDatabase(data):
+    """saveToDatabase"""
     try:
-        with get_db() as db:
+        with getDb() as db:
             cursor = db.cursor()
             cursor.execute("""
                 INSERT INTO energyData (date, hour, fveProduction, consumption, temperature) 
@@ -192,24 +202,24 @@ def save_to_database(data):
     except sqlite3.Error as e:
         logging.error(f"❌ Chyba při ukládání do databáze: {e}")
 
-def on_disconnect(client, userdata, rc):
-    """ Callback při odpojení """
+def onDisconnect(client, userdata, rc):
+    """onDisconnect"""
     logging.warning("⚠️ MQTT odpojeno.")
 
 @router.get("/get-mqtt-settings/")
-def get_mqtt_settings():
-    """ API endpoint pro načtení MQTT nastavení """
-    return load_settings()  # ✅ Nyní je to synchronní a správně volané
+def getMqttSettings():
+    """getMqttSettings"""
+    return loadSettings()
 
 @router.post("/save-mqtt-settings/")
-async def save_mqtt_settings_api(data: dict):
-    """ API endpoint pro uložení MQTT nastavení """
-    return save_mqtt_settings(data)
+async def saveMqttSettingsApi(data: dict):
+    """saveMqttSettingsApi"""
+    return saveMqttSettings(data)
 
 @router.post("/test-mqtt-connection/")
-async def test_mqtt_connection_api(data: dict):
-    """ API endpoint pro test připojení """
-    return test_mqtt_connection(data)
+async def testMqttConnectionApi(data: dict):
+    """testMqttConnectionApi"""
+    return testMqttConnection(data)
 
 if __name__ == "__main__":
-    restart_mqtt_client()
+    restartMqttClient()

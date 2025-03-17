@@ -1,16 +1,34 @@
+"""
+Hlavní API server aplikace. 
+
+Vstup: API volání z klientské aplikace.
+Výstup: Data o spotřebě energie, FVE a MQTT nastavení.
+Spolupracuje s: database, dataImport.
+
+Změny názvů funkcí a proměnných:
+- energy_data → energyData
+"""
+
+# Standardní knihovny
 import logging
+
+# Externí knihovny
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import get_energy_data
-import dataImport  # ✅ Importujeme router
 
-# ✅ Nastavení loggeru
+# Lokální importy
+from database import getEnergyData
+import dataImport  # Importujeme router
+
+# Logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Inicializace FastAPI aplikace
 app = FastAPI()
 
+# Middleware pro CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  
@@ -21,13 +39,15 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
+    """root"""
     return {"message": "Backend běží správně!"}
 
 @app.get("/energy-data")
-async def energy_data():
-    return get_energy_data()
+async def energyData():
+    """energyData"""
+    return getEnergyData()
 
-# ✅ Připojení API endpointů z `dataImport.py`
+# Připojení API endpointů z `dataImport.py`
 app.include_router(dataImport.router)
 
 if __name__ == "__main__":

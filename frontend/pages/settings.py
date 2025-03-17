@@ -1,95 +1,100 @@
+"""
+Stránka nastavení FVE umožňuje správu a konfiguraci fotovoltaických panelů.
+
+Vstup: Uživatel zadává zeměpisné souřadnice, náklon, orientaci a výkon jednotlivých panelů.
+Výstup: Data jsou uložena v databázi a aktualizují se v UI.
+Spolupracuje s: Backend API pro načítání, ukládání a mazání FVE panelů.
+"""
+
 import reflex as rx
 import requests
 import re
 from typing import List, Dict
-from frontend.templates import template  # Import dekorátoru pro šablonu
-from frontend.components.card import card  # ✅ Import card komponenty
+from frontend.templates import template  
+from frontend.components.card import card  
 
 BACKEND_URL = "http://localhost:8000"
 
 class SettingsState(rx.State):
-    fve_fields: List[Dict[str, str]] = []
+    """SettingsState"""
+    fveFields: List[Dict[str, str]] = []
 
-    def load_fve_data(self):
-        """Načte data FVE z databáze a aktualizuje UI."""
+    def loadFveData(self):
+        """loadFveData"""
         try:
             response = requests.get(f"{BACKEND_URL}/get-settings/")
             if response.status_code == 200:
                 data = response.json()
-                self.set_fve_fields(data["fve_fields"])  # ✅ Synchronizujeme UI
-                #print(f"🔄 Načteno z DB: {data}")
-                #print(f"🔄 Načteno z DB: {self.fve_fields}")  # ✅ Zobrazíme skutečnou hodnotu
+                self.set_fveFields(data["fveFields"])  
             else:
                 print("❌ Chyba při načítání dat.")
         except Exception as e:
             print(f"❌ Chyba API: {e}")
 
-    def add_field(self):
-        """Přidá nové pole pro další FVE a automaticky zkopíruje polohu, pokud už je vyplněna."""
-        new_field = {
-            "id": None,  # ✅ Nové pole nemá ID, dokud není uloženo
-            "latitude": self.fve_fields[0]["latitude"] if self.fve_fields else "",
-            "longitude": self.fve_fields[0]["longitude"] if self.fve_fields else "",
+    def addField(self):
+        """addField"""
+        newField = {
+            "id": None,
+            "latitude": self.fveFields[0]["latitude"] if self.fveFields else "",
+            "longitude": self.fveFields[0]["longitude"] if self.fveFields else "",
             "tilt": "",
             "azimuth": "",
             "power": ""
         }
-        self.set_fve_fields(self.fve_fields + [new_field])  # ✅ Aktualizace UI
+        self.set_fveFields(self.fveFields + [newField])  
 
-    def remove_field(self, index: int):
-        """Odstraní pole FVE z UI a z databáze, pokud má ID."""
-        if len(self.fve_fields) > 1:
-            panel_id = self.fve_fields[index].get("id")
-            updated_fields = self.fve_fields[:index] + self.fve_fields[index+1:]
-            self.set_fve_fields(updated_fields)
+    def removeField(self, index: int):
+        """removeField"""
+        if len(self.fveFields) > 1:
+            panelId = self.fveFields[index].get("id")
+            updatedFields = self.fveFields[:index] + self.fveFields[index+1:]
+            self.set_fveFields(updatedFields)
 
-            if panel_id:
+            if panelId:
                 try:
-                    response = requests.delete(f"{BACKEND_URL}/delete-fve/{panel_id}")
+                    response = requests.delete(f"{BACKEND_URL}/delete-fve/{panelId}")
                     if response.status_code == 200:
-                        print(f"🗑 Panel ID {panel_id} smazán z DB.")
+                        print(f"🗑 Panel ID {panelId} smazán z DB.")
                     else:
-                        print(f"❌ Chyba při mazání panelu ID {panel_id}")
+                        print(f"❌ Chyba při mazání panelu ID {panelId}")
                 except Exception as e:
                     print(f"❌ Chyba API: {e}")
 
-    def update_field(self, index: int, key: str, value: str):
-        """Umožní zadávat pouze čísla a desetinnou tečku, blokuje text."""
-        
-        value = value.replace(",", ".")  # Nahrazení čárky tečkou
-        value = re.sub(r"[^\d.]", "", value)  # Odstranění nečíselných znaků (kromě tečky)
-        
-        # Povolit maximálně jednu desetinnou tečku
+    def updateField(self, index: int, key: str, value: str):
+        """updateField"""
+        value = value.replace(",", ".")  
+        value = re.sub(r"[^\d.]", "", value)  
+
         if value.count(".") > 1:
             value = value.replace(".", "", value.count(".") - 1)
 
-        updated_fields = self.fve_fields.copy()
-        updated_fields[index] = updated_fields[index] | {key: value}  # Aktualizace hodnoty
-        self.set_fve_fields(updated_fields)
+        updatedFields = self.fveFields.copy()
+        updatedFields[index] = updatedFields[index] | {key: value}  
+        self.set_fveFields(updatedFields)
         
-    def submit_form(self):
-        """Odesílá data na backend přes API a poté obnoví UI."""
+    def submitForm(self):
+        """submitForm"""
         try:
-            fve_data = [
+            fveData = [
                 {
-                    "id": fve["id"],  # ✅ Pokud ID existuje, použije se pro update
+                    "id": fve["id"],
                     "latitude": float(fve["latitude"]),
                     "longitude": float(fve["longitude"]),
                     "tilt": float(fve["tilt"]),
                     "azimuth": float(fve["azimuth"]),
                     "power": float(fve["power"])
                 }
-                for fve in self.fve_fields
+                for fve in self.fveFields
             ]
 
             response = requests.post(
                 f"{BACKEND_URL}/import-settings/",
-                json={"fve_fields": fve_data}
+                json={"fveFields": fveData}
             )
 
             if response.status_code == 200:
                 print("✅ Parametry byly uloženy, aktualizuji UI...")
-                self.load_fve_data()  # ✅ Po uložení obnovíme UI
+                self.loadFveData()  
                 return rx.window_alert("✅ Parametry byly uloženy!")
             else:
                 return rx.window_alert("❌ Chyba při ukládání.")
@@ -97,79 +102,72 @@ class SettingsState(rx.State):
         except Exception as e:
             return rx.window_alert(f"❌ Chyba: {str(e)}")
 
-# Použití šablony pro tuto stránku
 @template(
-    route="/settings",  # Definování cesty pro tuto stránku
+    route="/settings",
     title="Settings",
     description="Manage your energy settings here."
 )
-
 def page() -> rx.Component:
+    """page"""
     return rx.container(
         rx.heading("Nastavení FVE", size="5"),
 
-        # ✅ Tlačítka "Přidat pole" a "Uložit změny" umístěná vpravo nahoře
         rx.hstack(
-            rx.button("Přidat další FVE", on_click=SettingsState.add_field, size="3"),
-            rx.button("Uložit parametry", on_click=SettingsState.submit_form, size="3", background="green", color="white"),
+            rx.button("Přidat další FVE", on_click=SettingsState.addField, size="3"),
+            rx.button("Uložit parametry", on_click=SettingsState.submitForm, size="3", background="green", color="white"),
             spacing="4",
             justify="end",
             width="100%",
             margin_bottom="20px",
         ),
-        
 
         rx.vstack(
             rx.foreach(
-                SettingsState.fve_fields,
+                SettingsState.fveFields,
                 lambda fve, index: card(
                     rx.heading(f"FVE {index + 1}", size="3"),
 
-                    # ✅ Použití `rx.grid` pro automatické zarovnání textů
                     rx.grid(
                         rx.text("Zeměpisná šířka:", size="3"),
                         rx.input(placeholder="Zeměpisná šířka", name=f"latitude_{index}", value=fve["latitude"], 
-                                 on_change=lambda val, idx=index: SettingsState.update_field(idx, "latitude", val)),
+                                 on_change=lambda val, idx=index: SettingsState.updateField(idx, "latitude", val)),
                         
                         rx.text("Zeměpisná délka:", size="3"),
                         rx.input(placeholder="Zeměpisná délka", name=f"longitude_{index}", value=fve["longitude"], 
-                                 on_change=lambda val, idx=index: SettingsState.update_field(idx, "longitude", val)),
+                                 on_change=lambda val, idx=index: SettingsState.updateField(idx, "longitude", val)),
 
                         rx.text("Náklon panelů (°):", size="3"),
                         rx.input(placeholder="Náklon panelů (°)", name=f"tilt_{index}", value=fve["tilt"], 
-                                 on_change=lambda val, idx=index: SettingsState.update_field(idx, "tilt", val)),
+                                 on_change=lambda val, idx=index: SettingsState.updateField(idx, "tilt", val)),
 
                         rx.text("Orientace panelů (°):", size="3"),
                         rx.input(placeholder="Orientace panelů (°)", name=f"azimuth_{index}", value=fve["azimuth"], 
-                                 on_change=lambda val, idx=index: SettingsState.update_field(idx, "azimuth", val)),
+                                 on_change=lambda val, idx=index: SettingsState.updateField(idx, "azimuth", val)),
 
                         rx.text("Výkon této části (kWp):", size="3"),
                         rx.input(placeholder="Výkon této části (kWp)", name=f"power_{index}", value=fve["power"], 
-                                 on_change=lambda val, idx=index: SettingsState.update_field(idx, "power", val)),
+                                 on_change=lambda val, idx=index: SettingsState.updateField(idx, "power", val)),
 
-                        spacing="3",  # ✅ Mezera mezi jednotlivými řádky
-                        columns="1fr 1fr",  # ✅ Automatická šířka pro popisky, zbytek pro vstupy
-                        width="100%",  # ✅ Aby grid byl široký jako karta
+                        spacing="3",
+                        columns="1fr 1fr",
+                        width="100%",
                     ),
 
-                    # ✅ Tlačítko "Odstranit pole" správně umístěno
                     rx.box(
                         rx.cond(
-                            SettingsState.fve_fields.length() > 1,  # ✅ Správná kontrola délky seznamu v Reflexu
-                            rx.button("Odstranit pole", on_click=lambda idx=index: SettingsState.remove_field(idx), 
+                            SettingsState.fveFields.length() > 1,  
+                            rx.button("Odstranit pole", on_click=lambda idx=index: SettingsState.removeField(idx), 
                                     style={"background": "red", "color": "white"})
                         ),
                         margin_top="10px",
                         justify="end",
                     ),
 
-
-                    flex="1",  # ✅ Karta nyní zabírá celou dostupnou šířku
+                    flex="1",  
                 )
             ),
             spacing="6",
         ),
 
-        on_mount=SettingsState.load_fve_data  # ✅ UI se aktualizuje při startu
+        on_mount=SettingsState.loadFveData  
     )
-
