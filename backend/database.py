@@ -32,13 +32,12 @@ def create_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS fve_panels (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        settings_id INTEGER,
         latitude REAL,
         longitude REAL,
         tilt REAL,
         azimuth REAL,
         power REAL,
-        FOREIGN KEY (settings_id) REFERENCES settings (id)
+        PRIMARY KEY (id)
     )
     """)
 
@@ -99,24 +98,8 @@ def create_database():
     conn.close()
     print("✅ Tabulky byly úspěšně vytvořeny nebo aktualizovány.")
 
-def save_settings(totalPower: float):
-    """Uloží celkový výkon FVE (totalPower) do databáze."""
-    with closing(get_db()) as db, db:
-        cursor = db.cursor()
 
-        # ✅ Nejprve ověříme, zda existuje settings ID
-        cursor.execute("SELECT id FROM settings WHERE id = 1")
-        existing = cursor.fetchone()
-
-        if existing:
-            cursor.execute("UPDATE settings SET totalPower = ? WHERE id = 1", (totalPower,))
-        else:
-            cursor.execute("INSERT INTO settings (id, totalPower) VALUES (1, ?)", (totalPower,))
-        
-        db.commit()
-        return 1  # ✅ Vždy vracíme settings_id = 1
-
-def save_fve_panel(panel_id: Optional[int], settings_id: int, latitude: float, longitude: float, tilt: float, azimuth: float, power: float):
+def save_fve_panel(panel_id: Optional[int], latitude: float, longitude: float, tilt: float, azimuth: float, power: float):
     """Uloží nebo aktualizuje FVE panel v databázi a zajistí správné číslování ID."""
     with closing(get_db()) as db, db:
         cursor = db.cursor()
@@ -134,9 +117,9 @@ def save_fve_panel(panel_id: Optional[int], settings_id: int, latitude: float, l
             new_id = count + 1  # ✅ Nastavíme nové ID jako nejmenší dostupné číslo
 
             cursor.execute("""
-                INSERT INTO fve_panels (id, settings_id, latitude, longitude, tilt, azimuth, power) 
+                INSERT INTO fve_panels (id, latitude, longitude, tilt, azimuth, power) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (new_id, settings_id, latitude, longitude, tilt, azimuth, power))
+            """, (new_id, latitude, longitude, tilt, azimuth, power))
             
             panel_id = new_id  # ✅ Vrátíme správné ID
         

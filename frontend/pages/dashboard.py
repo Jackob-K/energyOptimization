@@ -20,8 +20,9 @@ def resetButton():
         }
     )
 
-@template(route="/dashboard", title="Dashboard")
+@template(route="/dashboard", title="Dashboard", on_load=[MainChartState.setToday, PriceChartState.setToday])
 def page() -> rx.Component:
+    """Hlavní stránka dashboardu s grafy."""
     return rx.vstack(
         resetButton(),
         mainChart(),

@@ -7,6 +7,7 @@ import os
 import base64
 import httpx
 from typing import List, Optional
+import mqttListener
 
 # ✅ Nastavení loggeru
 logger = logging.getLogger(__name__)
@@ -22,7 +23,6 @@ class FVEData(BaseModel):
     power: float
 
 class SolarParams(BaseModel):
-    totalPower: float
     fve_fields: List[FVEData]  # ✅ Seznam panelů FVE
 
 # ✅ Povinné sloupce v souboru
@@ -103,13 +103,11 @@ async def process_uploaded_file(payload: ProcessFileModel):
 @router.post("/import-settings/")
 async def import_settings(solar_params: SolarParams):
     """Uloží nastavení FVE a panely do databáze."""
-    settings_id = database.save_settings(solar_params.totalPower)
 
     updated_panels = []
     for fve in solar_params.fve_fields:
         panel_id = database.save_fve_panel(
             panel_id=fve.id if fve.id is not None else None,
-            settings_id=settings_id,
             latitude=fve.latitude,
             longitude=fve.longitude,
             tilt=fve.tilt,
@@ -125,3 +123,34 @@ async def get_settings():
     """Vrací uložené parametry FVE zpět do UI."""
     data = database.get_fve_data()
     return data
+
+# ✅ Model pro MQTT nastavení
+class MQTTSettingsModel(BaseModel):
+    broker: str
+    port: int
+    topic: str
+    username: str
+    password: str
+
+
+@router.get("/get-mqtt-settings/")
+def get_mqtt_settings():
+    """Vrátí aktuální uložené MQTT nastavení."""
+    return mqttListener.get_mqtt_settings()  # Teď je to správně synchronní
+
+
+@router.post("/save-mqtt-settings/")
+async def save_mqtt_settings(data: MQTTSettingsModel):
+    """Uloží nové MQTT nastavení do databáze."""
+    try:
+        mqttListener.save_mqtt_settings(data.dict())
+        return {"message": "✅ MQTT nastavení bylo uloženo"}
+    except Exception as e:
+        logger.error(f"❌ Chyba při ukládání MQTT nastavení: {e}")
+        raise HTTPException(status_code=500, detail="Chyba při ukládání")
+
+
+@router.post("/test-mqtt-connection/")
+async def test_mqtt_connection(data: MQTTSettingsModel):
+    """Otestuje připojení k MQTT brokeru."""
+    return mqttListener.test_mqtt_connection(data.dict())

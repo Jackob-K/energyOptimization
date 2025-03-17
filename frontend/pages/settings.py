@@ -5,7 +5,7 @@ from typing import List, Dict
 from frontend.templates import template  # Import dekorátoru pro šablonu
 from frontend.components.card import card  # ✅ Import card komponenty
 
-BACKEND_URL = "http://localhost:8000"  # 🔹 Opravený backend URL
+BACKEND_URL = "http://localhost:8000"
 
 class SettingsState(rx.State):
     fve_fields: List[Dict[str, str]] = []
@@ -70,7 +70,6 @@ class SettingsState(rx.State):
     def submit_form(self):
         """Odesílá data na backend přes API a poté obnoví UI."""
         try:
-            total_power = sum(float(fve["power"]) for fve in self.fve_fields if fve["power"])
             fve_data = [
                 {
                     "id": fve["id"],  # ✅ Pokud ID existuje, použije se pro update
@@ -85,7 +84,7 @@ class SettingsState(rx.State):
 
             response = requests.post(
                 f"{BACKEND_URL}/import-settings/",
-                json={"totalPower": total_power, "fve_fields": fve_data}
+                json={"fve_fields": fve_data}
             )
 
             if response.status_code == 200:
@@ -173,3 +172,4 @@ def page() -> rx.Component:
 
         on_mount=SettingsState.load_fve_data  # ✅ UI se aktualizuje při startu
     )
+

@@ -38,6 +38,7 @@ nh3==0.2.21
 numpy==2.2.3
 openpyxl==3.1.5
 packaging==24.2
+paho-mqtt==2.1.0
 pandas==2.2.3
 platformdirs==4.3.6
 propcache==0.3.0

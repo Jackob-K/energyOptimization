@@ -26,11 +26,29 @@ class PriceChartState(rx.State):
         self.priceChartData = [{"hour": row[0], "price": row[1], "quantity": row[2]} for row in priceData]
 
     def shiftDay(self, direction: str):
-        """Posune datum o jeden den vpřed nebo vzad."""
-        dateObj = datetime.strptime(self.currentDate, "%Y-%m-%d")
-        dateObj += timedelta(days=1 if direction == "next" else -1)
-        self.currentDate = dateObj.strftime("%Y-%m-%d")
-        self.fetchData()
+        """Posune datum vpřed nebo vzad jen na dny s dostupnými daty."""
+        conn = get_db()
+        cursor = conn.cursor()
+
+        if direction == "next":
+            query = """
+                SELECT MIN(datum) FROM energy_prices
+                WHERE datum > ? AND cena IS NOT NULL AND mnozstvi IS NOT NULL
+            """
+        else:  # "prev"
+            query = """
+                SELECT MAX(datum) FROM energy_prices
+                WHERE datum < ? AND cena IS NOT NULL AND mnozstvi IS NOT NULL
+            """
+
+        cursor.execute(query, (self.currentDate,))
+        nextAvailableDate = cursor.fetchone()[0]
+        conn.close()
+
+        if nextAvailableDate:
+            self.currentDate = nextAvailableDate  # Nastavíme nové dostupné datum
+            self.fetchData()
+
 
     def setToday(self):
         """Nastaví datum na dnešní den."""
@@ -78,6 +96,7 @@ def priceChart():
                             "position": "outsideLeft",
                             "dx": -20,
                         },
+                        padding= {"top": 10}
                     ),
                     rx.recharts.y_axis(
                         tick_line=False,

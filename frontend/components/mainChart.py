@@ -20,7 +20,7 @@ class MainChartState(rx.State):
         if self.selectedInterval == "day":
             startDate = endDate.strftime("%Y-%m-%d")
             query = """
-                SELECT date || ' ' || hour, fveProduction, consumption, consumptionPredicted
+                SELECT date || ' ' || hour, fveProduction, fvePredicted, consumption, consumptionPredicted
                 FROM energyData
                 WHERE date = ? AND hour != 24
                 ORDER BY date ASC, hour ASC
@@ -31,7 +31,7 @@ class MainChartState(rx.State):
             startDate = (endDate - timedelta(days=endDate.weekday())).strftime("%Y-%m-%d")
             endDate = (datetime.strptime(startDate, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")
             query = """
-                SELECT date || ' ' || hour, fveProduction, consumption, consumptionPredicted
+                SELECT date || ' ' || hour, fveProduction, fvePredicted, consumption, consumptionPredicted
                 FROM energyData
                 WHERE date BETWEEN ? AND ? AND hour != 24
                 ORDER BY date ASC, hour ASC
@@ -45,6 +45,7 @@ class MainChartState(rx.State):
             query = """
                 SELECT date, 
                     SUM(fveProduction), 
+                    SUM(fvePredicted),
                     SUM(consumption), 
                     SUM(consumptionPredicted)
                 FROM energyData
@@ -58,7 +59,7 @@ class MainChartState(rx.State):
             startDate = endDate.replace(month=1, day=1).strftime("%Y-%m-%d")
             endDate = endDate.replace(month=12, day=31).strftime("%Y-%m-%d")
             query = """
-                SELECT SUBSTR(date, 1, 7) AS month, SUM(fveProduction), SUM(consumption), SUM(consumptionPredicted)
+                SELECT SUBSTR(date, 1, 7) AS month, SUM(fveProduction), SUM(fvePredicted), SUM(consumption), SUM(consumptionPredicted)
                 FROM energyData
                 WHERE date BETWEEN ? AND ? AND hour = 24
                 GROUP BY month
@@ -78,7 +79,7 @@ class MainChartState(rx.State):
         predictedStarted = False
 
         for row in data:
-            timestamp, production, realConsumption, predictedConsumption = row
+            timestamp, production, predictedProduction, realConsumption, predictedConsumption = row
             formatted_timestamp = self.formatXAxisTicks(timestamp)  # ✅ Formátování osy X pro všechny záznamy
 
             if realConsumption is not None:
@@ -121,7 +122,7 @@ class MainChartState(rx.State):
                     "production": None,
                     "consumption": None,
                     "consumptionPredicted": predictedConsumption,
-                    "fvePredicted": None,
+                    "fvePredicted": predictedProduction,
                 })
 
         self.chartData = processedData  # ✅ Nyní obsahuje správné hodnoty osy X pro celý graf
@@ -299,6 +300,7 @@ def mainChart():
                         stroke=styles.graphConsumptionPredictedColor,
                         stroke_width=2,
                         stroke_dasharray="5 5",
+                        fill=styles.graphConsumptionPredictedFill,
                         fill_opacity=0,
                         dot=False,
                     ),
