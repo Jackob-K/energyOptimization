@@ -125,3 +125,20 @@ baseStylesheets = [
 baseStyle = {
     "font_family": "Inter",
 }
+
+
+############################################################
+#                  IKONY A POŘADÍ STRÁNEK                 #
+############################################################
+
+pageIcons = {
+    "Dashboard": "layout-dashboard",
+    "Settings": "settings",
+    "DataFeed": "rss",
+    # můžeš přidat další podle potřeby
+}
+
+# Fallback ikona, pokud není ve slovníku
+defaultPageIcon = "layout-dashboard"
+
+pageOrder = ["/dashboard", "/datafeed", "/settings"]

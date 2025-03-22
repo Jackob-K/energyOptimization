@@ -13,7 +13,7 @@ def navbarMenu() -> rx.Component:
     """Vytváří navigační menu s odkazy a ikonami."""
     return rx.vstack(  
         rx.hstack(  
-            rx.icon("home", size=20),  
+            rx.icon("layout-dashboard", size=20),  
             rx.link("Dashboard", href="/dashboard", style={"margin-left": "10px"}),  
         ),
         rx.hstack(  
@@ -21,8 +21,8 @@ def navbarMenu() -> rx.Component:
             rx.link("Settings", href="/settings", style={"margin-left": "10px"}),    
         ),
         rx.hstack(  
-            rx.icon("home", size=20),  
-            rx.link("DataFeed", href="/datafeed", style={"margin-left": "10px"}),    
+            rx.icon("rss", size=20),  
+            rx.link("Datafeed", href="/datafeed", style={"margin-left": "10px"}),    
         ),
     )
 

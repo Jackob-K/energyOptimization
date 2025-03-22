@@ -4,16 +4,6 @@ Modul pro správu MQTT připojení a příjem dat.
 Vstup: MQTT zprávy s údaji o spotřebě a výrobě energie.
 Výstup: Data uložená v databázi.
 Spolupracuje s: database.
-
-Změny názvů funkcí a proměnných:
-- load_settings → loadSettings
-- save_mqtt_settings → saveMqttSettings
-- test_mqtt_connection → testMqttConnection
-- restart_mqtt_client → restartMqttClient
-- on_connect → onConnect
-- on_message → onMessage
-- save_to_database → saveToDatabase
-- on_disconnect → onDisconnect
 """
 
 # Standardní knihovny

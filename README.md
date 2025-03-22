@@ -1,9 +1,10 @@
 
 ```
 MojeAplikace
+├─ .DS_Store
 ├─ assets
-│  └─ favicon.ico
 ├─ backend
+│  ├─ .DS_Store
 │  ├─ __init__.py
 │  ├─ dataImport.py
 │  ├─ database.py
@@ -12,7 +13,6 @@ MojeAplikace
 │  ├─ mqttListener.py
 │  ├─ optimization.py
 │  ├─ scrape.py
-│  ├─ uploads
 │  └─ usagePrediction
 │     ├─ Models
 │     │  ├─ model_metrics.pkl
@@ -22,8 +22,10 @@ MojeAplikace
 │     ├─ trainModel.py
 │     └─ usagePrediction.py
 ├─ frontend
+│  ├─ .DS_Store
 │  ├─ components
 │  │  ├─ card.py
+│  │  ├─ fveField.py
 │  │  ├─ mainChart.py
 │  │  ├─ navbar.py
 │  │  ├─ priceChart.py
@@ -43,6 +45,5 @@ MojeAplikace
 ├─ optimized_schedule.json
 ├─ requirements.txt
 ├─ rxconfig.py
-└─ uploaded_files
 
 ```

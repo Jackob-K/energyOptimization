@@ -47,25 +47,35 @@ def sidebarFooter() -> rx.Component:
         padding="0.35em",
     )
 
-def sidebarItemIcon(icon: str) -> rx.Component:
-    """sidebarItemIcon"""
-    return rx.icon(icon, size=18)
+def sidebarItemIcon(text: str) -> rx.Component:
+    icon_name = styles.pageIcons.get(text, styles.defaultPageIcon)
+    return rx.icon(icon_name, size=18)
+
+def getOrderedPages():
+    pages = get_decorated_pages()
+    return sorted(
+        pages,
+        key=lambda page: (
+            styles.pageOrder.index(page["route"])
+            if page["route"] in styles.pageOrder
+            else len(styles.pageOrder)
+        ),
+    )
+
+def getPageIcon(route: str) -> str:
+    return styles.pageIcons.get(route, styles.defaultPageIcon)
 
 def sidebarItem(text: str, url: str) -> rx.Component:
     """sidebarItem"""
     active = (rx.State.router.page.path == url.lower()) | (
         (rx.State.router.page.path == "/") & text == "Overview"
     )
+    
+    rx.icon(getPageIcon(url), size=18)
 
     return rx.link(
         rx.hstack(
-            rx.match(
-                text,
-                ("Dashboard", sidebarItemIcon("layout-dashboard")),
-                ("About", sidebarItemIcon("book-open")),
-                ("Settings", sidebarItemIcon("settings")),
-                sidebarItemIcon("layout-dashboard"),
-            ),
+            sidebarItemIcon(text),
             rx.text(text, size="3", weight="regular"),
             color=rx.cond(active, styles.accentTextColor, styles.textColor),
             style={
@@ -89,22 +99,7 @@ def sidebarItem(text: str, url: str) -> rx.Component:
 
 def sidebar() -> rx.Component:
     """sidebar"""
-    pages = get_decorated_pages()
-
-    orderedPageRoutes = [
-        "/",
-        "/about",
-        "/settings",
-    ]
-
-    orderedPages = sorted(
-        pages,
-        key=lambda page: (
-            orderedPageRoutes.index(page["route"])
-            if page["route"] in orderedPageRoutes
-            else len(orderedPageRoutes)
-        ),
-    )
+    orderedPages = getOrderedPages()
 
     return rx.flex(
         rx.vstack(

@@ -1,4 +1,3 @@
-import sqlite3
 import requests
 import pvlib
 import datetime
@@ -22,7 +21,7 @@ Spolupráce:
 """
 
 
-# 🌞 Načtení parametrů FVE panelů z databáze
+# Načtení parametrů FVE panelů z databáze
 def getFvePanels():
     """Načte parametry všech FVE panelů z databáze."""
     with getDb() as db:

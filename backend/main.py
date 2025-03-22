@@ -3,10 +3,7 @@ Hlavní API server aplikace.
 
 Vstup: API volání z klientské aplikace.
 Výstup: Data o spotřebě energie, FVE a MQTT nastavení.
-Spolupracuje s: database, dataImport.
-
-Změny názvů funkcí a proměnných:
-- energy_data → energyData
+Spolupracuje s: database, apiHandlers.
 """
 
 # Standardní knihovny
@@ -19,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Lokální importy
 from database import getEnergyData
-import dataImport  # Importujeme router
+import apiHandlers as apiHandlers  # Importujeme router
 
 # Logger
 logging.basicConfig(level=logging.INFO)
@@ -47,8 +44,8 @@ async def energyData():
     """energyData"""
     return getEnergyData()
 
-# Připojení API endpointů z `dataImport.py`
-app.include_router(dataImport.router)
+# Připojení API endpointů z `apiHandlers.py`
+app.include_router(apiHandlers.router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

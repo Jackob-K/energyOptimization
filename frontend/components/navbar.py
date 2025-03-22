@@ -8,10 +8,25 @@ Spolupracuje s: Reflex (UI framework), frontend.styles (styly), backend (stránk
 
 import reflex as rx
 from .. import styles
+from reflex.page import get_decorated_pages
 
-def menuItemIcon(icon: str) -> rx.Component:
-    """menuItemIcon"""
-    return rx.icon(icon, size=20)
+def menuItemIcon(text: str) -> rx.Component:
+    icon_name = styles.pageIcons.get(text, styles.defaultPageIcon)
+    return rx.icon(icon_name, size=18)
+
+def getOrderedPages():
+    pages = get_decorated_pages()
+    return sorted(
+        pages,
+        key=lambda page: (
+            styles.pageOrder.index(page["route"])
+            if page["route"] in styles.pageOrder
+            else len(styles.pageOrder)
+        ),
+    )
+
+def getPageIcon(route: str) -> str:
+    return styles.pageIcons.get(route, styles.defaultPageIcon)
 
 def menuItem(text: str, url: str) -> rx.Component:
     """menuItem"""
@@ -21,13 +36,7 @@ def menuItem(text: str, url: str) -> rx.Component:
 
     return rx.link(
         rx.hstack(
-            rx.match(
-                text,
-                ("Dashboard", menuItemIcon("layout-dashboard")),
-                ("About", menuItemIcon("book-open")),
-                ("Settings", menuItemIcon("settings")),
-                menuItemIcon("layout-dashboard"),
-            ),
+            rx.icon(getPageIcon(url), size=20),
             rx.text(text, size="4", weight="regular"),
             color=rx.cond(active, styles.accentTextColor, styles.textColor),
             style={
@@ -74,19 +83,8 @@ def navbarFooter() -> rx.Component:
 
 def menuButton() -> rx.Component:
     """menuButton"""
-    from reflex.page import get_decorated_pages
 
-    orderedPageRoutes = ["/", "/about", "/settings"]
-    pages = get_decorated_pages()
-
-    orderedPages = sorted(
-        pages,
-        key=lambda page: (
-            orderedPageRoutes.index(page["route"])
-            if page["route"] in orderedPageRoutes
-            else len(orderedPageRoutes)
-        ),
-    )
+    orderedPages = getOrderedPages()
 
     return rx.drawer.root(
         rx.drawer.trigger(rx.icon("align-justify")),
@@ -124,7 +122,6 @@ def menuButton() -> rx.Component:
         ),
         direction="right",
     )
-
 def navbar() -> rx.Component:
     """navbar"""
     return rx.el.nav(

@@ -60,10 +60,6 @@ print(f"📌 RMSE: {rmse:.2f}")
 print(f"📌 R2 skóre: {r2:.4f}")
 print(f"📌 Nejlepší hyperparametry: {gridSearch.best_params_}")
 
-# Uložení nejlepšího modelu
-import os
-import joblib
-
 modelDir = "backend/usagePrediction/Models"
 os.makedirs(modelDir, exist_ok=True)
 
