@@ -175,3 +175,5 @@ async def saveMqttSettings(data: MqttSettingsModel):
 async def testMqttConnection(data: MqttSettingsModel):
     """testMqttConnection"""
     return mqttListener.testMqttConnection(data.dict())
+
+

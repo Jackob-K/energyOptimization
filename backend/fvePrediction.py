@@ -1,122 +1,186 @@
+import sqlite3
+import requests
+import pvlib
+import datetime
+import numpy as np
+from database import getDb
+
 """
-Program načte předzpracovaná data z databáze, ověří existenci chybějících predikcí,
-doplní chybějící predikce pomocí uloženého XGBoost modelu a uloží výsledné predikce
-spotřeby energie zpět do databáze energyData.
+Tento program slouží k predikci výroby elektrické energie z fotovoltaických panelů (FVE).
+Vstupy:
+  - Parametry FVE panelů uložené v databázi (souřadnice, výkon, sklon, azimut).
+  - Meteorologická předpověď (teplota, solární radiace) získaná z Open-Meteo API.
 
-Vstup: data z databáze processedData, uložený model (xgboost_model.pkl)
-Výstup: aktualizované predikce v databázi energyData (sloupec consumptionPredicted)
-Spolupracuje s: backend.database.getDb, backend.usagePrediction.dataProcessor
+Výstupy:
+  - Aktualizované hodnoty predikované výroby elektřiny v tabulce `energyData` pro následujících 24 hodin.
+  - Celková denní predikce výroby elektřiny (záznam s `hour = 24`).
+
+Spolupráce:
+  - Spolupracuje s databází SQLite (tabulky `fve_panels`, `energyData`).
+  - Využívá API Open-Meteo pro získání předpovědi počasí.
+  - Používá knihovnu `pvlib` k výpočtu výroby FVE.
 """
 
 
-# Externí knihovny
-import joblib
-import pandas as pd
+# 🌞 Načtení parametrů FVE panelů z databáze
+def getFvePanels():
+    """Načte parametry všech FVE panelů z databáze."""
+    with getDb() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fve_panels")
+        panels = cursor.fetchall()
 
-# Lokální importy
-from backend.database import getDb
+    return [
+        {
+            "id": row["id"],
+            "latitude": row["latitude"],
+            "longitude": row["longitude"],
+            "tilt": row["tilt"],
+            "azimuth": row["azimuth"],
+            "power": row["power"]
+        }
+        for row in panels
+    ]
 
-def loadModel(modelPath="backend/usagePrediction/Models/xgboost_model.pkl"):
-    """loadModel"""
-    return joblib.load(modelPath)
 
-def checkExistingPredictions():
-    """checkExistingPredictions"""
-    with getDb() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT MIN(date) FROM energyData WHERE consumptionPredicted IS NULL;
-        """)
-        firstMissingDate = cursor.fetchone()[0]
+# 🔄 Konverze azimutu pro Open-Meteo
+def convertAzimuthForOpenMeteo(azimuth):
+    """Převede azimut z klasického systému (0° = Sever, 180° = Jih) na Open-Meteo (-90° = Východ, 0° = Jih, 90° = Západ)."""
+    return azimuth - 180  # Posuneme systém, aby 0° byl Jih
 
-    if firstMissingDate is not None:
-        print(f"✅ Chybí predikce od {firstMissingDate}, budeme je generovat.")
-        return firstMissingDate
+
+# ☁️ Získání předpovědi počasí
+def getWeatherForecast(lat, lon, tilt, azimuth):
+    """Načte hodinovou předpověď počasí pro danou lokalitu a vrátí hodnoty pro zítřek."""
+    
+    correctedAzimuth = convertAzimuthForOpenMeteo(azimuth)  # ✅ Oprava azimutu
+
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude={lat}&longitude={lon}"
+        f"&hourly=temperature_2m,shortwave_radiation"
+        f"&models=icon_seamless"
+        f"&tilt={tilt}&azimuth={correctedAzimuth}"  # ✅ Použijeme opravený azimut
+        f"&timezone=Europe/Prague"
+    )
+
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        data = response.json()
+
+        # ✅ Bereme jen prvních 24 hodin (zítřek)
+        times = data["hourly"]["time"][:24]
+        temperatures = data["hourly"]["temperature_2m"][:24]
+        solarRadiation = data["hourly"]["shortwave_radiation"][:24]
+
+        print(f"✅ Načteno {len(times)} hodinových hodnot s opraveným azimutem {correctedAzimuth}°.")
+
+        return {
+            "time": times,
+            "temperature": temperatures,
+            "solarRadiation": solarRadiation
+        }
+    
     else:
-        print("✅ Všechny historické predikce jsou doplněny, není třeba generovat nové.")
+        print(f"⚠ Chyba při načítání předpovědi: {response.status_code}")
+        print(f"🛠 Detaily chyby: {response.text}")
         return None
 
-def getProcessedData():
-    """getProcessedData"""
-    with getDb() as conn:
-        query = """
-        SELECT date, hour, month, day_of_week, is_weekend,
-               consumption_lag_1, consumption_lag_2, consumption_lag_3, consumption_lag_24,
-               consumption_roll_3h, consumption_roll_6h, consumption_roll_12h, consumption_roll_24h,
-               temperature, temperature_lag_1, temperature_lag_2, temperature_lag_3, temperature_lag_24,
-               temperature_roll_3h, temperature_roll_6h, temperature_roll_12h, temperature_roll_24h
-        FROM processedData
-        WHERE hour < 24
-        ORDER BY date, hour;
-        """
-        processedDf = pd.read_sql_query(query, conn)
 
-    processedDf["date"] = pd.to_datetime(processedDf["date"])
+# ⚡ Výpočet výroby pomocí pvlib
+def calculateProduction(panel, weather):
+    """Vypočítá hodinovou výrobu FVE pomocí knihovny pvlib na základě solární radiace."""
+    times = [datetime.datetime.fromisoformat(t) for t in weather["time"]]
+    
+    location = pvlib.location.Location(
+        latitude=panel["latitude"], 
+        longitude=panel["longitude"]
+    )
+    
+    solarPosition = location.get_solarposition(times)
+    poaIrrad = weather["solarRadiation"]
 
-    numericCols = [
-        "consumption_lag_1", "consumption_lag_2", "consumption_lag_3", "consumption_lag_24",
-        "consumption_roll_3h", "consumption_roll_6h", "consumption_roll_12h", "consumption_roll_24h",
-        "temperature", "temperature_lag_1", "temperature_lag_2", "temperature_lag_3", "temperature_lag_24",
-        "temperature_roll_3h", "temperature_roll_6h", "temperature_roll_12h", "temperature_roll_24h"
-    ]
-    processedDf[numericCols] = processedDf[numericCols].apply(pd.to_numeric, errors="coerce")
+    panelPower = panel["power"]
+    tilt = panel["tilt"]
+    azimuth = panel["azimuth"]
 
-    print("📊 Datové typy po opravě:\n", processedDf.dtypes)
+    # Korekce podle úhlu dopadu světla (předběžná metoda)
+    effectiveIrrad = poaIrrad * np.cos(np.radians(solarPosition["zenith"] - tilt))
 
-    return processedDf
+    # Výstupní výkon, zaokrouhlený na dvě desetinná místa
+    production = np.round((effectiveIrrad / 1000) * panelPower, 2)  # Přepočet na kW
+    
+    return production
 
-def savePredictionsToDb(predictions, processedDf):
-    """savePredictionsToDb"""
-    with getDb() as conn:
-        cursor = conn.cursor()
-        for i, prediction in enumerate(predictions):
-            dateStr = processedDf.iloc[i]["date"].strftime("%Y-%m-%d")
-            hour = int(processedDf.iloc[i]["hour"])
-            roundedPrediction = round(float(prediction), 2)
 
-            print(f"Ukládám predikci: {dateStr} {hour}:00 → {roundedPrediction:.2f}")
+# 📊 Uložení predikovaných hodnot do databáze
+def savePredictions(date, hourlyProduction):
+    """Uloží predikovanou výrobu FVE do databáze pro jednotlivé hodiny i celkový denní součet."""
+    with getDb() as db:
+        cursor = db.cursor()
+        
+        for hour in range(24):
+            totalProduction = sum(max(0, prod.iloc[hour]) for prod in hourlyProduction)
+            totalProduction = round(totalProduction, 2)  # ✅ Zaokrouhlení na 2 desetinná místa
+            
+            cursor.execute("""
+                UPDATE energyData SET fvePredicted = ? 
+                WHERE date = ? AND hour = ?
+            """, (totalProduction, date, hour))
+            
+            if cursor.rowcount == 0:  # Pokud neexistuje, vytvoříme nový záznam
+                cursor.execute("""
+                    INSERT INTO energyData (date, hour, fvePredicted)
+                    VALUES (?, ?, ?)
+                """, (date, hour, totalProduction))
+        
+        # ✅ Uložíme sumu za celý den jako hour=24
+        dailyTotalProduction = sum(sum(max(0, p) for p in prod) for prod in hourlyProduction)
+        dailyTotalProduction = round(dailyTotalProduction, 2)  # ✅ Zaokrouhlení na 2 desetinná místa
+        
+        cursor.execute("""
+            UPDATE energyData SET fvePredicted = ? 
+            WHERE date = ? AND hour = 24
+        """, (dailyTotalProduction, date))
+        
+        if cursor.rowcount == 0:  # Pokud neexistuje, vytvoříme nový záznam
+            cursor.execute("""
+                INSERT INTO energyData (date, hour, fvePredicted)
+                VALUES (?, 24, ?)
+            """, (date, dailyTotalProduction))
+        
+        db.commit()
 
-            query = """
-            UPDATE energyData
-            SET consumptionPredicted = ?
-            WHERE date(date) = date(?) AND hour = ?;
-            """
-            cursor.execute(query, (roundedPrediction, dateStr, hour))
 
-        conn.commit()
-        print("✅ Všechny predikce byly uloženy do databáze se zaokrouhlením na 2 desetinná místa!")
+# 🚀 Hlavní spouštěcí funkce
+def main():
+    """Hlavní funkce pro výpočet a uložení predikce výroby FVE na základě předpovědi počasí."""
+    print("🔄 Spouštím predikci výroby FVE...")
+
+    # Určení zítřejšího data
+    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    # Načtení parametrů všech FVE panelů
+    panels = getFvePanels()
+
+    allHourlyProductions = []
+    
+    for panel in panels:
+        # Získání předpovědi počasí pro konkrétní panel
+        weather = getWeatherForecast(panel["latitude"], panel["longitude"], panel["tilt"], panel["azimuth"])
+        
+        if weather:
+            # Výpočet výroby na základě předpovědi
+            hourlyProduction = calculateProduction(panel, weather)
+            allHourlyProductions.append(hourlyProduction)
+
+    # Uložení predikovaných hodnot do databáze
+    if allHourlyProductions:
+        savePredictions(tomorrow, allHourlyProductions)
+
+    print("✅ Predikce výroby dokončena!")
+
 
 if __name__ == "__main__":
-    # Zjistíme první den, kde chybí predikce
-    firstMissingDate = checkExistingPredictions()
-
-    if firstMissingDate is not None:
-        # Načtení zpracovaných dat z `processedData`
-        processedDf = getProcessedData()
-        
-        if processedDf is None or processedDf.empty:
-            print("❌ Nelze provést predikci: Chybí vstupní data v `processedData`!")
-        else:
-            # Načtení modelu
-            model = loadModel()
-
-            # Ověření správného pořadí sloupců
-            expectedColumns = model.get_booster().feature_names
-            print("✅ Model očekává tyto sloupce:", expectedColumns)
-
-            # Odfiltrujeme pouze data od `firstMissingDate`, ale `date` zachováme!
-            processedDf = processedDf[processedDf["date"] >= firstMissingDate]
-
-            # Seřadíme sloupce podle trénovacích dat modelu (bez odstranění `date`)
-            modelInput = processedDf[expectedColumns]
-
-            # Provádění predikce
-            predictions = model.predict(modelInput)
-
-            # Uložení predikcí do databáze
-            print("📊 Prvních 10 predikcí:", predictions[:10])
-            savePredictionsToDb(predictions, processedDf)
-
-            print("✅ Předpověď spotřeby byla doplněna od prvního chybějícího data až do dneška +7 dní.")
-    else:
-        print("✅ Žádná predikce nechybí. Není třeba nic aktualizovat.")
+    main()

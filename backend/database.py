@@ -230,5 +230,25 @@ def getEnergyData():
             for row in cursor.fetchall()
         ]
 
+def getSettings():
+    """Získá všechna nastavení z databáze."""
+    with closing(getDb()) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT id, paramName, value FROM settings")
+        settings = cursor.fetchall()
+
+        return [
+            {"id": row["id"], "paramName": row["paramName"], "value": row["value"]}
+            for row in settings
+        ]
+
+def updateSetting(setting_id: int, new_value: str):
+    """Aktualizuje hodnotu parametru v databázi."""
+    with closing(getDb()) as db, db:
+        cursor = db.cursor()
+        cursor.execute("UPDATE settings SET value = ? WHERE id = ?", (new_value, setting_id))
+        db.commit()
+        print(f"✅ Nastavení ID {setting_id} bylo aktualizováno na hodnotu {new_value}.")
+
 if __name__ == "__main__":
     createDatabase()

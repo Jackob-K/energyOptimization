@@ -8,7 +8,6 @@ Spolupracuje s: Moduly `dashboard`, `settings`, `datafeed` a komponentou `navbar
 
 import reflex as rx
 from .pages import dashboard, settings, datafeed
-from .components.navbar import navbar  
 
 def navbarMenu() -> rx.Component:
     """Vytváří navigační menu s odkazy a ikonami."""
@@ -22,7 +21,7 @@ def navbarMenu() -> rx.Component:
             rx.link("Settings", href="/settings", style={"margin-left": "10px"}),    
         ),
         rx.hstack(  
-            rx.icon("cloud-upload", size=20),  
+            rx.icon("home", size=20),  
             rx.link("DataFeed", href="/datafeed", style={"margin-left": "10px"}),    
         ),
     )
