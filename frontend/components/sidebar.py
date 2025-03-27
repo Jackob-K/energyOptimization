@@ -13,10 +13,6 @@ from reflex.page import get_decorated_pages
 def sidebarHeader() -> rx.Component:
     """sidebarHeader"""
     return rx.hstack(
-        rx.color_mode_cond(
-            rx.image(src="/reflex_black.svg", height="1.5em"),
-            rx.image(src="/reflex_white.svg", height="1.5em"),
-        ),
         rx.spacer(),
         align="center",
         width="100%",
@@ -25,27 +21,7 @@ def sidebarHeader() -> rx.Component:
     )
 
 def sidebarFooter() -> rx.Component:
-    """sidebarFooter"""
-    return rx.hstack(
-        rx.link(
-            rx.text("Docs", size="3"),
-            href="https://reflex.dev/docs/getting-started/introduction/",
-            color_scheme="gray",
-            underline="none",
-        ),
-        rx.link(
-            rx.text("Blog", size="3"),
-            href="https://reflex.dev/blog/",
-            color_scheme="gray",
-            underline="none",
-        ),
-        rx.spacer(),
-        rx.color_mode.button(style={"opacity": "0.8", "scale": "0.95"}),
-        justify="start",
-        align="center",
-        width="100%",
-        padding="0.35em",
-    )
+    return rx.spacer()
 
 def sidebarItemIcon(text: str) -> rx.Component:
     icon_name = styles.pageIcons.get(text, styles.defaultPageIcon)
@@ -70,7 +46,7 @@ def sidebarItem(text: str, url: str) -> rx.Component:
     active = (rx.State.router.page.path == url.lower()) | (
         (rx.State.router.page.path == "/") & text == "Overview"
     )
-    
+
     rx.icon(getPageIcon(url), size=18)
 
     return rx.link(

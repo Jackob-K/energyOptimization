@@ -3,131 +3,117 @@ Program načte předzpracovaná data z databáze, ověří existenci chybějíc�
 doplní chybějící predikce pomocí uloženého XGBoost modelu a uloží výsledné predikce
 spotřeby energie zpět do databáze energyData.
 
-Vstup: data z databáze processedData, uložený model (xgboost_model.pkl)
+Vstup: data z databáze processedData, uložený model (xgboostModel.pkl)
 Výstup: aktualizované predikce v databázi energyData (sloupec consumptionPredicted)
 Spolupracuje s: backend.database.getDb, backend.usagePrediction.dataProcessor
 """
-# Externí knihovny
+
 import joblib
 import pandas as pd
-
-# Lokální importy
 from backend.database import getDb
 
-def loadModel(modelPath="backend/usagePrediction/Models/xgboost_model.pkl"):
-    """loadModel"""
+def loadModel(modelPath="backend/usagePrediction/Models/xgboostModel.pkl"):
     return joblib.load(modelPath)
 
 def checkExistingPredictions():
-    """checkExistingPredictions"""
     with getDb() as conn:
         cursor = conn.cursor()
-        
-        # Výpis prvních 10 hodnot pro kontrolu
         cursor.execute("""
-            SELECT MIN(date) FROM energyData 
+            SELECT MIN(DATE(timestamp)) FROM energyData 
             WHERE consumptionPredicted IS NULL 
-            AND hour < 24;
-        """)
-        results = cursor.fetchall()
-        print("🔍 Kontrola hodnot v databázi:")
-        for row in results:
-            print(row)
-
-        # Kontrola chybějících predikcí
-        cursor.execute("""
-            SELECT MIN(date) FROM energyData 
-            WHERE consumptionPredicted IS NULL 
-            AND hour < 24;
+            AND time(timestamp) != '23:59:59';
         """)
         firstMissingDate = cursor.fetchone()[0]
 
-    if firstMissingDate is not None:
+    if firstMissingDate:
         print(f"✅ Chybí predikce od {firstMissingDate}, budeme je generovat.")
         return firstMissingDate
     else:
-        print("✅ Všechny historické predikce jsou doplněny, není třeba generovat nové.")
+        print("✅ Všechny predikce jsou doplněny.")
         return None
 
-
 def getProcessedData():
-    """getProcessedData"""
     with getDb() as conn:
         query = """
-        SELECT date, hour, month, day_of_week, is_weekend,
-               consumption_lag_1, consumption_lag_2, consumption_lag_3, consumption_lag_24,
-               consumption_roll_3h, consumption_roll_6h, consumption_roll_12h, consumption_roll_24h,
-               temperature, temperature_lag_1, temperature_lag_2, temperature_lag_3, temperature_lag_24,
-               temperature_roll_3h, temperature_roll_6h, temperature_roll_12h, temperature_roll_24h
+        SELECT timestamp, month, dayOfWeek, isWeekend, hour, day,
+               consumptionLag1, consumptionLag2, consumptionLag3, consumptionLag24,
+               consumptionRoll3h, consumptionRoll6h, consumptionRoll12h, consumptionRoll24h,
+               temperature, temperatureLag1, temperatureLag2, temperatureLag3, temperatureLag24,
+               temperatureRoll3h, temperatureRoll6h, temperatureRoll12h, temperatureRoll24h
         FROM processedData
-        WHERE hour < 24
-        ORDER BY date, hour;
+        ORDER BY timestamp;
         """
-        processedDf = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn)
 
-    processedDf["date"] = pd.to_datetime(processedDf["date"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-    numericCols = [
-        "consumption_lag_1", "consumption_lag_2", "consumption_lag_3", "consumption_lag_24",
-        "consumption_roll_3h", "consumption_roll_6h", "consumption_roll_12h", "consumption_roll_24h",
-        "temperature", "temperature_lag_1", "temperature_lag_2", "temperature_lag_3", "temperature_lag_24",
-        "temperature_roll_3h", "temperature_roll_6h", "temperature_roll_12h", "temperature_roll_24h"
-    ]
-    processedDf[numericCols] = processedDf[numericCols].apply(pd.to_numeric, errors="coerce")
+    numericCols = df.columns.difference(["timestamp"])
+    df[numericCols] = df[numericCols].apply(pd.to_numeric, errors="coerce")
 
-    print("📊 Datové typy po opravě:\n", processedDf.dtypes)
-
-    return processedDf
+    print("📊 Načteno z processedData:\n", df.dtypes)
+    return df
 
 def savePredictionsToDb(predictions, processedDf):
-    """savePredictionsToDb"""
     with getDb() as conn:
         cursor = conn.cursor()
+
+        # Uložíme hodinové predikce
         for i, prediction in enumerate(predictions):
-            dateStr = processedDf.iloc[i]["date"].strftime("%Y-%m-%d")
-            hour = int(processedDf.iloc[i]["hour"])
+            timestampStr = processedDf.iloc[i]["timestamp"].isoformat()
             roundedPrediction = round(float(prediction), 2)
 
-            print(f"Ukládám predikci: {dateStr} {hour}:00 → {roundedPrediction:.2f}")
+            print(f"Ukládám predikci: {timestampStr} → {roundedPrediction:.2f}")
+            cursor.execute("""
+                UPDATE energyData
+                SET consumptionPredicted = ?
+                WHERE timestamp = ?;
+            """, (roundedPrediction, timestampStr))
 
-            query = """
-            UPDATE energyData
-            SET consumptionPredicted = ?
-            WHERE date(date) = date(?) AND hour = ?;
-            """
-            cursor.execute(query, (roundedPrediction, dateStr, hour))
+        # Vytvoříme denní souhrn (timestamp = 23:59:59)
+        processedDf["prediction"] = predictions
+        processedDf["date"] = processedDf["timestamp"].dt.date
+
+        dailySums = processedDf.groupby("date")["prediction"].sum().reset_index()
+
+        for _, row in dailySums.iterrows():
+            dateStr = row["date"].strftime("%Y-%m-%d")
+            sumPrediction = round(float(row["prediction"]), 2)
+            fullTimestamp = f"{dateStr}T23:59:59"
+
+            print(f"➕ Ukládám souhrn za den {dateStr} → {sumPrediction:.2f}")
+
+            cursor.execute("""
+                UPDATE energyData
+                SET consumptionPredicted = ?
+                WHERE timestamp = ?;
+            """, (sumPrediction, fullTimestamp))
+
+            if cursor.rowcount == 0:
+                cursor.execute("""
+                    INSERT INTO energyData (timestamp, consumptionPredicted)
+                    VALUES (?, ?);
+                """, (fullTimestamp, sumPrediction))
 
         conn.commit()
-        print("✅ Všechny predikce byly uloženy do databáze se zaokrouhlením na 2 desetinná místa!")
+        print("✅ Všechny predikce byly uloženy, včetně denních souhrnů (23:59:59)!")
 
 if __name__ == "__main__":
-    # Zjistíme první den, kde chybí predikce
     firstMissingDate = checkExistingPredictions()
 
     if firstMissingDate is not None:
-        # Načtení zpracovaných dat z `processedData`
         processedDf = getProcessedData()
         
         if processedDf is None or processedDf.empty:
             print("❌ Nelze provést predikci: Chybí vstupní data v `processedData`!")
         else:
-            # Načtení modelu
             model = loadModel()
-
-            # Ověření správného pořadí sloupců
             expectedColumns = model.get_booster().feature_names
-            print("✅ Model očekává tyto sloupce:", expectedColumns)
 
-            # Odfiltrujeme pouze data od `firstMissingDate`, ale `date` zachováme!
-            processedDf = processedDf[processedDf["date"] >= firstMissingDate]
-
-            # Seřadíme sloupce podle trénovacích dat modelu (bez odstranění `date`)
+            processedDf = processedDf[processedDf["timestamp"] >= firstMissingDate]
             modelInput = processedDf[expectedColumns]
 
-            # Provádění predikce
             predictions = model.predict(modelInput)
 
-            # Uložení predikcí do databáze
             print("📊 Prvních 10 predikcí:", predictions[:10])
             savePredictionsToDb(predictions, processedDf)
 

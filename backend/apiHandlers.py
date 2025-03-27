@@ -11,6 +11,7 @@ Spolupracuje s: database, mqttListener.
 import os
 import base64
 import logging
+from datetime import datetime, timedelta
 
 # Externí knihovny
 import pandas as pd
@@ -31,8 +32,6 @@ router = APIRouter()
 
 # Povinné sloupce v souboru
 requiredColumns = {"date", "hour", "consumption", "temperature", "fveProduction"}
-uploadDir = "uploads"
-os.makedirs(uploadDir, exist_ok=True)
 
 class FveData(BaseModel):
     """FveData"""
@@ -52,21 +51,19 @@ class FileUploadModel(BaseModel):
     filename: str
     filedata: str
 
+class ProcessFileModel(BaseModel):
+    filename: str
+    filedata: str  # base64 string
+
 @router.post("/upload/")
 async def uploadFile(file: FileUploadModel):
     """uploadFile"""
-    fileLocation = os.path.join(uploadDir, file.filename)
-    
-    fileContent = base64.b64decode(file.filedata)
-    with open(fileLocation, "wb") as buffer:
-        buffer.write(fileContent)
-
-    logger.info(f"✅ Soubor {file.filename} nahrán do {fileLocation}")
+    logger.info(f"✅ Přijímám soubor {file.filename}")
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://127.0.0.1:8000/process-file/",
-            json={"fileLocation": fileLocation}
+            json={"filename": file.filename, "filedata": file.filedata}
         )
 
     if response.status_code == 200:
@@ -76,45 +73,49 @@ async def uploadFile(file: FileUploadModel):
 
     return response.json()
 
-class ProcessFileModel(BaseModel):
-    """ProcessFileModel"""
-    fileLocation: str
 
 @router.post("/process-file/")
 async def processUploadedFile(payload: ProcessFileModel):
     """processUploadedFile"""
-    fileLocation = payload.fileLocation
-
-    if not os.path.exists(fileLocation):
-        raise HTTPException(status_code=400, detail=f"❌ Soubor nebyl nalezen: {fileLocation}")
-
-    logger.info(f"🔄 Zpracovávám soubor: {fileLocation}")
-
     try:
-        if fileLocation.endswith(".csv"):
-            df = pd.read_csv(fileLocation)
-        elif fileLocation.endswith(".xlsx"):
-            df = pd.read_excel(fileLocation)
+        logger.info(f"🔄 Zpracovávám soubor z paměti: {payload.filename}")
+
+        decoded = base64.b64decode(payload.filedata)
+
+        # Načtení přímo z paměti (bez ukládání)
+        if payload.filename.endswith(".csv"):
+            from io import StringIO
+            df = pd.read_csv(StringIO(decoded.decode("utf-8")))
+        elif payload.filename.endswith(".xlsx"):
+            from io import BytesIO
+            df = pd.read_excel(BytesIO(decoded))
         else:
             raise HTTPException(status_code=400, detail="Nepodporovaný formát souboru")
-        
-        if not requiredColumns.issubset(df.columns):
-            missingColumns = requiredColumns - set(df.columns)
-            raise HTTPException(status_code=400, detail=f"❌ Chybějící sloupce: {', '.join(missingColumns)}")
 
-        df["date"] = pd.to_datetime(df["date"]).dt.date  
+        if not requiredColumns.issubset(df.columns):
+            missing = requiredColumns - set(df.columns)
+            raise HTTPException(status_code=400, detail=f"❌ Chybějící sloupce: {', '.join(missing)}")
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
         df["hour"] = df["hour"].fillna(24).astype(int)
 
-        df = df[["date", "hour", "fveProduction", "consumption", "temperature"]]
-        
-        database.saveHistoricalData(df)
+        df["timestamp"] = df.apply(
+            lambda row: (
+                datetime.combine(row["date"], datetime.min.time()) +
+                (timedelta(hours=23, minutes=59, seconds=59) if row["hour"] == 24 else timedelta(hours=row["hour"]))
+            ).isoformat(),
+            axis=1
+        )
 
-        os.remove(fileLocation)
+        df = df[["timestamp", "fveProduction", "consumption", "temperature"]]
+
+        database.saveHistoricalData(df)
 
         return {"message": "✅ Data byla úspěšně nahrána a uložena!"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"❌ Chyba při zpracování: {str(e)}")
+
 
 @router.post("/import-settings/")
 async def importSettings(solar_params: SolarParams):

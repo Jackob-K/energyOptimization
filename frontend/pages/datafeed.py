@@ -132,12 +132,11 @@ def page() -> rx.Component:
     """page"""
     return rx.hstack(
         rx.container(
-            rx.heading("📂 Nahraj soubor pro zpracování", size="4", margin_bottom="10px"),
+            rx.heading("📂 Nahrajte soubor pro zpracování", size="4", margin_bottom="10px"),
             card(
                 rx.vstack(
                     rx.upload(
                         rx.vstack(
-                            rx.button("Vybrat soubor"),
                             rx.text("Přetáhněte nebo klikněte pro výběr .csv / .xlsx"),
                         ),
                         id="upload_xlsx",
@@ -164,7 +163,7 @@ def page() -> rx.Component:
             rx.heading("🔧 Nastavení MQTT", size="4", margin_bottom="10px"),
             card(
                 rx.grid(
-                    rx.text("Broker Address:", min_width="150px"),  
+                    rx.text("Adresa Brokera:", min_width="150px"),  
                     rx.input(
                         placeholder="Zadejte adresu brokera",
                         value=MQTTSettingsState.broker, 
@@ -178,21 +177,21 @@ def page() -> rx.Component:
                         on_change=lambda val: MQTTSettingsState.updateField("port", val),
                         width="100px",
                     ),
-                    rx.text("Topic:", min_width="150px"),
+                    rx.text("Téma:", min_width="150px"),
                     rx.input(
                         placeholder="Zadejte MQTT topic",
                         value=MQTTSettingsState.topic, 
                         on_change=lambda val: MQTTSettingsState.updateField("topic", val),
                         width="250px",
                     ),
-                    rx.text("Username:", min_width="150px"),
+                    rx.text("Uživatel:", min_width="150px"),
                     rx.input(
                         placeholder="Zadejte uživatelské jméno",
                         value=MQTTSettingsState.username, 
                         on_change=lambda val: MQTTSettingsState.updateField("username", val),
                         width="250px",
                     ),
-                    rx.text("Password:", min_width="150px"),
+                    rx.text("Heslo:", min_width="150px"),
                     rx.input(
                         placeholder="Zadejte heslo",
                         value=MQTTSettingsState.password, 

@@ -12,6 +12,7 @@ Spolupracuje s: backend.database.getDb, backend.usagePrediction.dataProcessor.
 import os
 import sqlite3
 from contextlib import closing
+import datetime
 
 # Externí knihovny
 import pandas as pd
@@ -41,7 +42,7 @@ def createDatabase():
         """)
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS fve_panels (
+        CREATE TABLE IF NOT EXISTS fvePanels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             latitude REAL,
             longitude REAL,
@@ -53,53 +54,69 @@ def createDatabase():
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS energyData (
-            date TEXT,
-            hour INTEGER,
+            timestamp TEXT PRIMARY KEY,
             fveProduction REAL,
             fvePredicted REAL,
             consumption REAL,
             consumptionPredicted REAL,
-            temperature REAL,
-            PRIMARY KEY (date, hour)
+            temperature REAL
         );
         """)
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS energyPrices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            datum TEXT NOT NULL,
-            hodina INTEGER NOT NULL CHECK(hodina >= 0 AND hodina <= 23),
-            cena REAL,
-            mnozstvi REAL
+            timestamp TEXT PRIMARY KEY,
+            price REAL,
+            quantity REAL
         );
         """)
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS processedData (
-            date TEXT,
-            hour INTEGER,
+            timestamp TEXT PRIMARY KEY,
+            year INTEGER,
             month INTEGER,
-            day_of_week INTEGER,
-            is_weekend INTEGER,
+            day INTEGER,
+            hour INTEGER,
+            dayOfWeek INTEGER,
+            isWeekend INTEGER,
             consumption REAL,
-            consumption_lag_1 REAL,
-            consumption_lag_2 REAL,
-            consumption_lag_3 REAL,
-            consumption_lag_24 REAL,
-            consumption_roll_3h REAL,
-            consumption_roll_6h REAL,
-            consumption_roll_12h REAL,
-            consumption_roll_24h REAL,
+            consumptionLag1 REAL,
+            consumptionLag2 REAL,
+            consumptionLag3 REAL,
+            consumptionLag24 REAL,
+            consumptionRoll3h REAL,
+            consumptionRoll6h REAL,
+            consumptionRoll12h REAL,
+            consumptionRoll24h REAL,
             temperature REAL,
-            temperature_lag_1 REAL,
-            temperature_lag_2 REAL,
-            temperature_lag_3 REAL,
-            temperature_lag_24 REAL,
-            temperature_roll_3h REAL,
-            temperature_roll_6h REAL,
-            temperature_roll_12h REAL,
-            temperature_roll_24h REAL,
-            PRIMARY KEY (date, hour)
+            temperatureLag1 REAL,
+            temperatureLag2 REAL,
+            temperatureLag3 REAL,
+            temperatureLag24 REAL,
+            temperatureRoll3h REAL,
+            temperatureRoll6h REAL,
+            temperatureRoll12h REAL,
+            temperatureRoll24h REAL
+        );
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS batteryPlan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            action TEXT CHECK(action IN ('charge', 'discharge', 'idle')) NOT NULL,
+            powerTargetKw REAL NOT NULL DEFAULT 0
+        );
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS optimizationLog (
+            date TEXT PRIMARY KEY,
+            baselineCost REAL,
+            optimizedCost REAL,
+            saving REAL,
+            created_at TEXT
         );
         """)
 
@@ -113,17 +130,17 @@ def saveFvePanel(panel_id: Optional[int], latitude: float, longitude: float, til
         
         if panel_id:
             cursor.execute("""
-                UPDATE fve_panels 
+                UPDATE fvePanels 
                 SET latitude = ?, longitude = ?, tilt = ?, azimuth = ?, power = ?
                 WHERE id = ?
             """, (latitude, longitude, tilt, azimuth, power, panel_id))
         else:
-            cursor.execute("SELECT COUNT(*) FROM fve_panels")
+            cursor.execute("SELECT COUNT(*) FROM fvePanels")
             count = cursor.fetchone()[0]
             newId = count + 1  
 
             cursor.execute("""
-                INSERT INTO fve_panels (id, latitude, longitude, tilt, azimuth, power) 
+                INSERT INTO fvePanels (id, latitude, longitude, tilt, azimuth, power) 
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (newId, latitude, longitude, tilt, azimuth, power))
             
@@ -137,11 +154,11 @@ def getFveData():
     with closing(getDb()) as db:
         cursor = db.cursor()
 
-        cursor.execute("SELECT SUM(power) AS totalPower FROM fve_panels")
+        cursor.execute("SELECT SUM(power) AS totalPower FROM fvePanels")
         totalPowerData = cursor.fetchone()
         totalPower = totalPowerData["totalPower"] if totalPowerData and totalPowerData["totalPower"] is not None else 0
 
-        cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fve_panels")
+        cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fvePanels")
         fvePanels = cursor.fetchall()
 
         return {
@@ -164,25 +181,25 @@ def deleteFvePanel(panel_id: int):
     with closing(getDb()) as db, db:
         cursor = db.cursor()
 
-        cursor.execute("SELECT id FROM fve_panels WHERE id = ?", (panel_id,))
+        cursor.execute("SELECT id FROM fvePanels WHERE id = ?", (panel_id,))
         existing = cursor.fetchone()
 
         if not existing:
             print(f"❌ FVE panel s ID {panel_id} neexistuje!")
             return False  
 
-        cursor.execute("DELETE FROM fve_panels WHERE id = ?", (panel_id,))
+        cursor.execute("DELETE FROM fvePanels WHERE id = ?", (panel_id,))
         db.commit()
         print(f"✅ FVE panel s ID {panel_id} byl smazán.")
 
-        cursor.execute("SELECT id FROM fve_panels ORDER BY id ASC")
+        cursor.execute("SELECT id FROM fvePanels ORDER BY id ASC")
         panels = cursor.fetchall()
 
         if panels:
             newId = 1
             for row in panels:
                 oldId = row["id"]
-                cursor.execute("UPDATE fve_panels SET id = ? WHERE id = ?", (newId, oldId))
+                cursor.execute("UPDATE fvePanels SET id = ? WHERE id = ?", (newId, oldId))
                 newId += 1
 
             db.commit()
@@ -200,29 +217,41 @@ def saveHistoricalData(df: pd.DataFrame):
         df["fveProduction"] = df["fveProduction"].astype(float).round(2)
         df["consumption"] = df["consumption"].astype(float).round(2)
 
-        data = df[["date", "hour", "fveProduction", "consumption", "temperature"]].values.tolist()
+        # Pokud timestamp ještě není, vytvoříme ho ze sloupců date a hour
+        if "timestamp" not in df.columns:
+            def to_timestamp(row):
+                base = datetime.datetime.strptime(row["date"], "%Y-%m-%d")
+                if row["hour"] == 24:
+                    dt = base.replace(hour=23, minute=59, second=59)
+                else:
+                    dt = base.replace(hour=row["hour"])
+                return dt.isoformat()
+            df["timestamp"] = df.apply(to_timestamp, axis=1)
+
+        data = df[["timestamp", "fveProduction", "consumption", "temperature"]].values.tolist()
 
         cursor.executemany("""
-        INSERT INTO energyData (date, hour, fveProduction, consumption, temperature)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(date, hour) DO UPDATE SET 
+        INSERT INTO energyData (timestamp, fveProduction, consumption, temperature)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(timestamp) DO UPDATE SET 
             fveProduction = excluded.fveProduction,
             consumption = excluded.consumption,
             temperature = excluded.temperature;
         """, data)
 
         db.commit()
-        print("✅ Historická data byla úspěšně importována do databáze.")
+        print("✅ Historická data byla uložena pomocí timestampu.")
+
 
 def getEnergyData():
     """getEnergyData"""
     with closing(getDb()) as db:
         cursor = db.cursor()
         cursor.execute("""
-            SELECT date, fveProduction, consumption 
+            SELECT timestamp, fveProduction, consumption 
             FROM energyData 
-            WHERE hour = 24  
-            ORDER BY date ASC
+            WHERE time(timestamp) = '23:59:59'
+            ORDER BY timestamp ASC
         """)
 
         return [
@@ -249,6 +278,37 @@ def updateSetting(setting_id: int, new_value: str):
         cursor.execute("UPDATE settings SET value = ? WHERE id = ?", (new_value, setting_id))
         db.commit()
         print(f"✅ Nastavení ID {setting_id} bylo aktualizováno na hodnotu {new_value}.")
+
+def getSetting(paramName):
+    with closing(getDb()) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT value FROM settings WHERE paramName = ?", (paramName,))
+        result = cursor.fetchone()
+        return result["value"] if result else None
+
+
+
+def getTomorrowPrices():
+    tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).date().isoformat()
+    with closing(getDb()) as db:
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT timestamp, price
+            FROM energyPrices
+            WHERE DATE(timestamp) = ?
+            ORDER BY timestamp ASC
+        """, (tomorrow,))
+        return cursor.fetchall()
+
+
+def insertBatteryPlan(timestamp, action, powerTargetKw):
+    with closing(getDb()) as db:
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO batteryPlan (timestamp, action, powerTargetKw)
+            VALUES (?, ?, ?)
+        """, (timestamp, action, powerTargetKw))
+        db.commit()
 
 if __name__ == "__main__":
     createDatabase()

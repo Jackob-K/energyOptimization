@@ -1,75 +1,144 @@
-"""
-Modul pro optimalizaci spotřeby energie na základě predikovaných dat a cen elektřiny.
-
-Vstup: Predikce spotřeby a výroby FVE, ceny elektřiny, parametry jističe.
-Výstup: Optimalizovaný plán spotřeby uložený v JSON souboru.
-Spolupracuje s: SQLite databází.
-"""
-
-# Standardní knihovny
-import os
 import json
-import sqlite3
+import os
+import numpy as np
 from datetime import datetime, timedelta
+from database import getDb, getSetting, insertBatteryPlan
 
-# Konstanty
-dbName = os.path.abspath("backend/database.db")  # Absolutní cesta
-jsonOutputPath = "optimized_schedule.json"
+jsonOutputPath = os.path.join(os.path.dirname(__file__), "optimizedSchedule.json")
 
-def fetchSetting(paramName, dataType=int):
-    """fetchSetting"""
-    conn = sqlite3.connect(dbName)
-    cursor = conn.cursor()
-    cursor.execute("SELECT value FROM settings WHERE paramName = ?", (paramName,))
-    result = cursor.fetchone()
-    conn.close()
-    return dataType(result[0]) if result else None  
+def logOptimizationResult(date, baseline, optimized, saving):
+    """Uloží denní úsporu do tabulky optimizationLog"""
+    with getDb() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS optimizationLog (
+                date TEXT PRIMARY KEY,
+                baselineCost REAL,
+                optimizedCost REAL,
+                saving REAL,
+                created_at TEXT
+            );
+        """)
+        cursor.execute("""
+            INSERT INTO optimizationLog (date, baselineCost, optimizedCost, saving, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(date) DO UPDATE SET
+                baselineCost = excluded.baselineCost,
+                optimizedCost = excluded.optimizedCost,
+                saving = excluded.saving,
+                created_at = excluded.created_at;
+        """, (date, baseline, optimized, saving, datetime.now().isoformat()))
+        conn.commit()
 
 def fetchData():
-    """fetchData"""
-    conn = sqlite3.connect(dbName)
-    cursor = conn.cursor()
+    with getDb() as conn:
+        cursor = conn.cursor()
 
-    breakerCurrent = fetchSetting("breakerCurrentPerPhase", int)
-    phases = fetchSetting("phases", int)
-    overrideMode = fetchSetting("overrideMode", int)
-    maxPower = breakerCurrent * 230 * phases  
+        breakerCurrent = int(getSetting("breakerCurrentPerPhase"))
+        phases = int(getSetting("phases"))
+        overrideMode = int(getSetting("overrideMode"))
+        maxPower = breakerCurrent * 230 * phases
 
-    cursor.execute("SELECT hour, consumptionPredicted, fvePredicted FROM energyData WHERE date = date('now', '+1 day')")
-    energyData = cursor.fetchall()
-    
-    cursor.execute("SELECT hodina, cena FROM energy_prices WHERE datum = date('now', '+1 day')")
-    priceData = dict(cursor.fetchall())  
-    
-    conn.close()
-    
-    energyData = [(hour, consumption if consumption is not None else 0, fve if fve is not None else 0)
-                   for hour, consumption, fve in energyData]
-    
-    return energyData, priceData, maxPower, overrideMode
+        batteryMaxCharge = float(getSetting("batteryMaxChargeKW"))
+        batteryMaxDischarge = float(getSetting("batteryMaxDischargeKW"))
+
+        tomorrow = (datetime.now() + timedelta(days=1)).date().isoformat()
+
+        cursor.execute("""
+            SELECT timestamp, consumptionPredicted, fvePredicted
+            FROM energyData
+            WHERE DATE(timestamp) = ?
+        """, (tomorrow,))
+        energyData = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT STRFTIME('%H', timestamp) as hour, price
+            FROM energyPrices
+            WHERE DATE(timestamp) = ?
+        """, (tomorrow,))
+        priceRows = cursor.fetchall()
+
+    if not energyData:
+        print("Chybí predikovaná data v `energyData` pro zítřek.")
+        return None
+
+    if not priceRows:
+        print("Chybí ceny v `energyPrices` pro zítřek.")
+        return None
+
+    priceData = {int(row["hour"]): row["price"] for row in priceRows}
+    pricesOnly = list(priceData.values())
+
+    lowThreshold = np.percentile(pricesOnly, 25)
+    highThreshold = np.percentile(pricesOnly, 75)
+
+    return energyData, priceData, overrideMode, batteryMaxCharge, batteryMaxDischarge, lowThreshold, highThreshold
+
 
 def optimizeConsumption():
-    """optimizeConsumption"""
-    energyData, priceData, maxPower, overrideMode = fetchData()
+    fetched = fetchData()
+    if not fetched:
+        print("Optimalizace neproběhla – chybějící data.")
+        return None
+    energyData, priceData, overrideMode, maxCharge, maxDischarge, lowThres, highThres = fetchData()
     schedule = []
-    
-    for hour, consumption, fve in energyData:
-        netConsumption = max(consumption - fve, 0)  
-        price = priceData.get(hour, 0)
-        schedule.append({"hour": hour, "power_kW": round(min(netConsumption, maxPower / 1000), 2), "price": price})
-    
-    schedule.sort(key=lambda x: x["price"])  
+    total_no_opt = 0
+    total_opt = 0
 
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    
+    for row in energyData:
+        timestamp = row["timestamp"]
+        hour = int(timestamp[11:13])
+        consumption = row["consumptionPredicted"] or 0
+        fve = row["fvePredicted"] or 0
+
+        netConsumption = max(consumption - fve, 0)
+        price = priceData.get(hour, 0)
+
+        baseline_cost = netConsumption * price / 1000
+        total_no_opt += baseline_cost
+
+        if price <= lowThres:
+            batteryAction = "charge"
+            batteryPower = maxCharge
+        elif price >= highThres:
+            batteryAction = "discharge"
+            batteryPower = maxDischarge
+        else:
+            batteryAction = "idle"
+            batteryPower = 0
+
+        adjusted_power = netConsumption
+        if batteryAction == "charge":
+            adjusted_power += batteryPower
+        elif batteryAction == "discharge":
+            adjusted_power -= batteryPower
+
+        adjusted_power = max(adjusted_power, 0)
+        optimized_cost = adjusted_power * price / 1000
+        total_opt += optimized_cost
+
+        insertBatteryPlan(timestamp, batteryAction, batteryPower)
+
+        schedule.append({
+            "hour": hour,
+            "power_kW": round(adjusted_power, 2),
+            "price": price,
+            "batteryAction": batteryAction,
+            "batteryPowerTargetKw": batteryPower
+        })
+
+    tomorrow = (datetime.now() + timedelta(days=1)).date().isoformat()
+    saving = round(total_no_opt - total_opt, 2)
+    logOptimizationResult(tomorrow, round(total_no_opt, 2), round(total_opt, 2), saving)
+
     return {"date": tomorrow, "overrideMode": overrideMode, "recommendedHours": schedule}
 
 def saveToJson(data):
-    """saveToJson"""
     with open(jsonOutputPath, "w") as f:
         json.dump(data, f, indent=4)
     print(f"✅ Optimalizace uložena do {jsonOutputPath}")
 
 if __name__ == "__main__":
     optimizedSchedule = optimizeConsumption()
-    saveToJson(optimizedSchedule)
+    if optimizedSchedule:
+        saveToJson(optimizedSchedule)

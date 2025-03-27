@@ -6,12 +6,6 @@ vyhodnocuje jeho predikce a ukládá nejlepší model a metriky na disk.
 Vstup: Data připravená funkcí prepareTrainTestData()
 Výstup: Uložený nejlepší model v adresáři Models a metriky výkonu modelu
 Spolupracuje s: backend.database.getDb, backend.usagePrediction.prepareTrainTestData
-
-Změny názvů funkcí a proměnných:
-- X_train, X_test, y_train, y_test ponechány dle návaznosti na přípravu dat
-- best_model → bestModel
-- model_dir → modelDir
-- model_path → modelPath
 """
 
 # Standardní knihovny
@@ -20,16 +14,17 @@ import os
 # Externí knihovny
 import joblib
 import numpy as np
-import pandas as pd
 import xgboost as xgb
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_squared_error, r2_score
 
 # Lokální importy
 from backend.usagePrediction.dataProcessor import prepareTrainTestData
 
-# prepareTrainTestData
-X_train, X_test, y_train, y_test = prepareTrainTestData()
+# Načtení trénovacích/testovacích dat
+xTrain, xTest, yTrain, yTest = prepareTrainTestData()
 
-# gridSearch hyperparametrů
+# Definice gridu pro hledání nejlepších hyperparametrů
 paramGrid = {
     "subsample": [0.8, 1.0],
     "colsample_bytree": [0.8, 1.0],
@@ -38,38 +33,42 @@ paramGrid = {
     "learning_rate": [0.01, 0.05, 0.1]
 }
 
-# Inicializace a trénování modelu
-from sklearn.model_selection import GridSearchCV
-import xgboost as xgb
-
+# Inicializace modelu a grid search
 model = xgb.XGBRegressor(objective="reg:squarederror", random_state=42)
-gridSearch = GridSearchCV(model, paramGrid, scoring="neg_mean_squared_error", cv=5, n_jobs=-1, verbose=2)
-gridSearch.fit(X_train, y_train)
+gridSearch = GridSearchCV(
+    model,
+    paramGrid,
+    scoring="neg_mean_squared_error",
+    cv=5,
+    n_jobs=-1,
+    verbose=2
+)
 
-# Vyhodnocení modelu
+# Trénování modelu
+gridSearch.fit(xTrain, yTrain)
+
+# Výběr nejlepšího modelu a predikce
 bestModel = gridSearch.best_estimator_
-y_pred = bestModel.predict(X_test)
+yPred = bestModel.predict(xTest)
 
-from sklearn.metrics import mean_squared_error, r2_score
+# Výpočet metrik
+rmse = np.sqrt(mean_squared_error(yTest, yPred))
+r2 = r2_score(yTest, yPred)
 
-rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-r2 = r2_score(y_test, y_pred)
-
-print(f"✅ Data připravena! Trénovací sada: {X_train.shape}, Testovací sada: {X_test.shape}")
+print(f"✅ Data připravena! Trénovací sada: {xTrain.shape}, Testovací sada: {xTest.shape}")
 print(f"📌 RMSE: {rmse:.2f}")
 print(f"📌 R2 skóre: {r2:.4f}")
 print(f"📌 Nejlepší hyperparametry: {gridSearch.best_params_}")
 
+# Uložení modelu a metrik
 modelDir = "backend/usagePrediction/Models"
 os.makedirs(modelDir, exist_ok=True)
 
-modelPath = os.path.join(modelDir, "xgboost_model.pkl")
-bestModel = gridSearch.best_estimator_
+modelPath = os.path.join(modelDir, "xgboostModel.pkl")
 joblib.dump(bestModel, modelPath)
 print(f"✅ Nejlepší model uložen jako {modelPath}")
 
-# Uložení metrik
 metrics = {"RMSE": rmse, "R2": r2}
-metricsPath = os.path.join(modelDir, "model_metrics.pkl")
+metricsPath = os.path.join(modelDir, "modelMetrics.pkl")
 joblib.dump(metrics, metricsPath)
 print(f"✅ Metriky modelu uloženy jako {metricsPath}")

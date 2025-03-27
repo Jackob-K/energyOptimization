@@ -3,20 +3,24 @@
 MojeAplikace
 ├─ .DS_Store
 ├─ assets
+│  ├─ favicon.ico
+│  ├─ reflex_black.svg
+│  └─ reflex_white.svg
 ├─ backend
 │  ├─ .DS_Store
 │  ├─ __init__.py
-│  ├─ dataImport.py
+│  ├─ apiHandlers.py
 │  ├─ database.py
 │  ├─ fvePrediction.py
 │  ├─ main.py
 │  ├─ mqttListener.py
 │  ├─ optimization.py
+│  ├─ optimizedSchedule.json
 │  ├─ scrape.py
 │  └─ usagePrediction
 │     ├─ Models
-│     │  ├─ model_metrics.pkl
-│     │  └─ xgboost_model.pkl
+│     │  ├─ modelMetrics.pkl
+│     │  └─ xgboostModel.pkl
 │     ├─ __init__.py
 │     ├─ dataProcessor.py
 │     ├─ trainModel.py
@@ -42,8 +46,8 @@ MojeAplikace
 │  └─ templates
 │     ├─ __init__.py
 │     └─ template.py
-├─ optimized_schedule.json
 ├─ requirements.txt
 ├─ rxconfig.py
+└─ uploaded_files
 
 ```

@@ -15,7 +15,7 @@ Výstupy:
   - Celková denní predikce výroby elektřiny (záznam s `hour = 24`).
 
 Spolupráce:
-  - Spolupracuje s databází SQLite (tabulky `fve_panels`, `energyData`).
+  - Spolupracuje s databází SQLite (tabulky `fvePanels`, `energyData`).
   - Využívá API Open-Meteo pro získání předpovědi počasí.
   - Používá knihovnu `pvlib` k výpočtu výroby FVE.
 """
@@ -26,7 +26,7 @@ def getFvePanels():
     """Načte parametry všech FVE panelů z databáze."""
     with getDb() as db:
         cursor = db.cursor()
-        cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fve_panels")
+        cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fvePanels")
         panels = cursor.fetchall()
 
     return [
@@ -114,71 +114,63 @@ def calculateProduction(panel, weather):
 
 
 # 📊 Uložení predikovaných hodnot do databáze
-def savePredictions(date, hourlyProduction):
+def savePredictions(baseDate, hourlyProduction):
     """Uloží predikovanou výrobu FVE do databáze pro jednotlivé hodiny i celkový denní součet."""
     with getDb() as db:
         cursor = db.cursor()
-        
+
         for hour in range(24):
+            timestamp = datetime.datetime.combine(baseDate, datetime.time(hour)).isoformat()
             totalProduction = sum(max(0, prod.iloc[hour]) for prod in hourlyProduction)
-            totalProduction = round(totalProduction, 2)  # ✅ Zaokrouhlení na 2 desetinná místa
-            
+            totalProduction = round(totalProduction, 2)
+
             cursor.execute("""
-                UPDATE energyData SET fvePredicted = ? 
-                WHERE date = ? AND hour = ?
-            """, (totalProduction, date, hour))
-            
-            if cursor.rowcount == 0:  # Pokud neexistuje, vytvoříme nový záznam
-                cursor.execute("""
-                    INSERT INTO energyData (date, hour, fvePredicted)
-                    VALUES (?, ?, ?)
-                """, (date, hour, totalProduction))
-        
-        # ✅ Uložíme sumu za celý den jako hour=24
-        dailyTotalProduction = sum(sum(max(0, p) for p in prod) for prod in hourlyProduction)
-        dailyTotalProduction = round(dailyTotalProduction, 2)  # ✅ Zaokrouhlení na 2 desetinná místa
-        
+                INSERT INTO energyData (timestamp, fvePredicted)
+                VALUES (?, ?)
+                ON CONFLICT(timestamp) DO UPDATE SET
+                    fvePredicted = excluded.fvePredicted;
+            """, (timestamp, totalProduction))
+
+        # Záznam pro celý den (23:59:59)
+        end_of_day = datetime.datetime.combine(baseDate, datetime.time(23, 59, 59)).isoformat()
+        dailyTotal = sum(sum(max(0, p) for p in prod) for prod in hourlyProduction)
+        dailyTotal = round(dailyTotal, 2)
+
         cursor.execute("""
-            UPDATE energyData SET fvePredicted = ? 
-            WHERE date = ? AND hour = 24
-        """, (dailyTotalProduction, date))
-        
-        if cursor.rowcount == 0:  # Pokud neexistuje, vytvoříme nový záznam
-            cursor.execute("""
-                INSERT INTO energyData (date, hour, fvePredicted)
-                VALUES (?, 24, ?)
-            """, (date, dailyTotalProduction))
-        
+            INSERT INTO energyData (timestamp, fvePredicted)
+            VALUES (?, ?)
+            ON CONFLICT(timestamp) DO UPDATE SET
+                fvePredicted = excluded.fvePredicted;
+        """, (end_of_day, dailyTotal))
+
         db.commit()
+
 
 
 # 🚀 Hlavní spouštěcí funkce
 def main():
-    """Hlavní funkce pro výpočet a uložení predikce výroby FVE na základě předpovědi počasí."""
     print("🔄 Spouštím predikci výroby FVE...")
 
-    # Určení zítřejšího data
-    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-    
-    # Načtení parametrů všech FVE panelů
+    # Zítřejší den jako `date` objekt
+    tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+
     panels = getFvePanels()
-
     allHourlyProductions = []
-    
-    for panel in panels:
-        # Získání předpovědi počasí pro konkrétní panel
-        weather = getWeatherForecast(panel["latitude"], panel["longitude"], panel["tilt"], panel["azimuth"])
-        
-        if weather:
-            # Výpočet výroby na základě předpovědi
-            hourlyProduction = calculateProduction(panel, weather)
-            allHourlyProductions.append(hourlyProduction)
 
-    # Uložení predikovaných hodnot do databáze
+    for panel in panels:
+        weather = getWeatherForecast(
+            panel["latitude"], panel["longitude"],
+            panel["tilt"], panel["azimuth"]
+        )
+        if weather:
+            hourly = calculateProduction(panel, weather)
+            allHourlyProductions.append(hourly)
+
     if allHourlyProductions:
         savePredictions(tomorrow, allHourlyProductions)
 
     print("✅ Predikce výroby dokončena!")
+
 
 
 if __name__ == "__main__":

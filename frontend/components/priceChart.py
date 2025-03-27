@@ -14,16 +14,23 @@ class PriceChartState(rx.State):
         conn = getDb()
         cursor = conn.cursor()
         query = """
-            SELECT hodina+1, cena, mnozstvi
-            FROM energy_prices
-            WHERE datum = ?
-            ORDER BY hodina ASC
+            SELECT strftime('%H', timestamp) AS hour, price, quantity
+            FROM energyPrices
+            WHERE DATE(timestamp) = ?
+            ORDER BY timestamp ASC
         """
         cursor.execute(query, (self.currentDate,))
         priceData = cursor.fetchall()
         conn.close()
 
-        self.priceChartData = [{"hour": row[0], "price": row[1], "quantity": row[2]} for row in priceData]
+        self.priceChartData = [
+            {
+                "hour": int(row[0]) + 1,
+                "cena": row[1],
+                "množství": row[2]
+            }
+            for row in priceData
+        ]
 
     def shiftDay(self, direction: str):
         """Posune datum vpřed nebo vzad jen na dny s dostupnými daty."""
@@ -32,13 +39,13 @@ class PriceChartState(rx.State):
 
         if direction == "next":
             query = """
-                SELECT MIN(datum) FROM energy_prices
-                WHERE datum > ? AND cena IS NOT NULL AND mnozstvi IS NOT NULL
+                SELECT MIN(DATE(timestamp)) FROM energyPrices
+                WHERE DATE(timestamp) > ? AND price IS NOT NULL AND quantity IS NOT NULL
             """
         else:  # "prev"
             query = """
-                SELECT MAX(datum) FROM energy_prices
-                WHERE datum < ? AND cena IS NOT NULL AND mnozstvi IS NOT NULL
+                SELECT MAX(DATE(timestamp)) FROM energyPrices
+                WHERE DATE(timestamp) < ? AND price IS NOT NULL AND quantity IS NOT NULL
             """
 
         cursor.execute(query, (self.currentDate,))
@@ -72,13 +79,13 @@ def priceChart():
                 # 📈 Graf ceny elektřiny (line chart) + Množství (bar chart)
                 rx.recharts.composed_chart(
                     rx.recharts.line(
-                        data_key="price",
+                        data_key="cena",
                         stroke=styles.graphPriceColor,
                         stroke_width=3,
                         dot=True,
                     ),
                     rx.recharts.bar(
-                        data_key="quantity",
+                        data_key="množství",
                         fill=styles.graphQuantityFill, 
                         bar_size=15,
                         y_axis_id="right",

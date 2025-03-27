@@ -60,26 +60,7 @@ def menuItem(text: str, url: str) -> rx.Component:
 
 def navbarFooter() -> rx.Component:
     """navbarFooter"""
-    return rx.hstack(
-        rx.link(
-            rx.text("Docs", size="3"),
-            href="https://reflex.dev/docs/getting-started/introduction/",
-            color_scheme="gray",
-            underline="none",
-        ),
-        rx.link(
-            rx.text("Blog", size="3"),
-            href="https://reflex.dev/blog/",
-            color_scheme="gray",
-            underline="none",
-        ),
-        rx.spacer(),
-        rx.color_mode.button(style={"opacity": "0.8", "scale": "0.95"}),
-        justify="start",
-        align="center",
-        width="100%",
-        padding="0.35em",
-    )
+    return rx.spacer()
 
 def menuButton() -> rx.Component:
     """menuButton"""
@@ -126,10 +107,6 @@ def navbar() -> rx.Component:
     """navbar"""
     return rx.el.nav(
         rx.hstack(
-            rx.color_mode_cond(
-                rx.image(src="/reflex_black.svg", height="1em"),
-                rx.image(src="/reflex_white.svg", height="1em"),
-            ),
             rx.spacer(),
             menuButton(),
             align="center",

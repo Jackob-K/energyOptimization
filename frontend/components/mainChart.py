@@ -15,7 +15,7 @@ from .. import styles
 class MainChartState(rx.State):
     """MainChartState"""
     currentDate: str = datetime.today().strftime("%Y-%m-%d")
-    selectedInterval: str = "month"
+    selectedInterval: str = "měsíční"
     chartData: list = []
     displayedInterval: str = ""
 
@@ -25,51 +25,55 @@ class MainChartState(rx.State):
         cursor = conn.cursor()
         endDate = datetime.strptime(self.currentDate, "%Y-%m-%d")
 
-        if self.selectedInterval == "day":
+        if self.selectedInterval == "denní":
             startDate = endDate.strftime("%Y-%m-%d")
             query = """
-                SELECT date || ' ' || hour, fveProduction, fvePredicted, consumption, consumptionPredicted
+                SELECT timestamp, fveProduction, fvePredicted, consumption, consumptionPredicted
                 FROM energyData
-                WHERE date = ? AND hour != 24
-                ORDER BY date ASC, hour ASC
+                WHERE DATE(timestamp) BETWEEN ? AND ? AND time(timestamp) != '23:59:59'
+                ORDER BY timestamp ASC
             """
-            cursor.execute(query, (startDate,))
+            cursor.execute(query, (startDate, startDate))
 
-        elif self.selectedInterval == "week":
+        elif self.selectedInterval == "týdenní":
             startDate = (endDate - timedelta(days=endDate.weekday())).strftime("%Y-%m-%d")
             endDate = (datetime.strptime(startDate, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")
             query = """
-                SELECT date || ' ' || hour, fveProduction, fvePredicted, consumption, consumptionPredicted
+                SELECT timestamp, fveProduction, fvePredicted, consumption, consumptionPredicted
                 FROM energyData
-                WHERE date BETWEEN ? AND ? AND hour != 24
-                ORDER BY date ASC, hour ASC
+                WHERE DATE(timestamp) BETWEEN ? AND ? AND time(timestamp) != '23:59:59'
+                ORDER BY timestamp ASC
             """
             cursor.execute(query, (startDate, endDate))
 
-        elif self.selectedInterval == "month":
+        elif self.selectedInterval == "měsíční":
             startDate = endDate.replace(day=1).strftime("%Y-%m-%d")
             endDate = (datetime.strptime(startDate, "%Y-%m-%d") + timedelta(days=32)).replace(day=1) - timedelta(days=1)
             endDate = endDate.strftime("%Y-%m-%d")
             query = """
-                SELECT date, 
+                SELECT DATE(timestamp) as day,
                     SUM(fveProduction), 
                     SUM(fvePredicted),
                     SUM(consumption), 
                     SUM(consumptionPredicted)
                 FROM energyData
-                WHERE date BETWEEN ? AND ?
-                GROUP BY date
-                ORDER BY date ASC
+                WHERE DATE(timestamp) BETWEEN ? AND ? AND time(timestamp) = '23:59:59'
+                GROUP BY day
+                ORDER BY day ASC
             """
             cursor.execute(query, (startDate, endDate))
 
-        else:  # "year"
+        else:  # "roční"
             startDate = endDate.replace(month=1, day=1).strftime("%Y-%m-%d")
             endDate = endDate.replace(month=12, day=31).strftime("%Y-%m-%d")
             query = """
-                SELECT SUBSTR(date, 1, 7) AS month, SUM(fveProduction), SUM(fvePredicted), SUM(consumption), SUM(consumptionPredicted)
+                SELECT strftime('%Y-%m', timestamp) AS month,
+                    SUM(fveProduction), 
+                    SUM(fvePredicted),
+                    SUM(consumption), 
+                    SUM(consumptionPredicted)
                 FROM energyData
-                WHERE date BETWEEN ? AND ? AND hour = 24
+                WHERE DATE(timestamp) BETWEEN ? AND ? AND time(timestamp) = '23:59:59'
                 GROUP BY month
                 ORDER BY month ASC
             """
@@ -88,49 +92,49 @@ class MainChartState(rx.State):
 
         for row in data:
             timestamp, production, predictedProduction, realConsumption, predictedConsumption = row
-            formatted_timestamp = self.formatXAxisTicks(timestamp)  # ✅ Formátování osy X pro všechny záznamy
+            formattedTimestamp = self.formatXAxisTicks(timestamp)  # ✅ Formátování osy X pro všechny záznamy
 
             if realConsumption is not None:
                 lastRealConsumption = realConsumption
                 lastRealProduction = production
                 lastRealTimestamp = timestamp
                 processedData.append({
-                    "timestamp": formatted_timestamp,  # ✅ Nyní platí pro všechny záznamy
-                    "production": production,
-                    "consumption": realConsumption,
-                    "consumptionPredicted": None,
-                    "fvePredicted": None,
+                    "timestamp": formattedTimestamp,
+                    "Výroba FVE": production,
+                    "Spotřeba": realConsumption,
+                    "Predikovaná spotřeba": None,
+                    "Predikovaná výroba FVE": None,
                 })
             else:
                 if not predictedStarted and lastRealConsumption is not None:
                     predictedStarted = True
                     if lastRealTimestamp is not None:
                         try:
-                            if self.selectedInterval == "year":
+                            if self.selectedInterval == "roční":
                                 lastRealTimestamp_dt = datetime.strptime(lastRealTimestamp, "%Y-%m")  # ✅ Opraveno pro 'YYYY-MM'
                                 timestamp_dt = datetime.strptime(timestamp, "%Y-%m")  # ✅ Opraveno pro 'YYYY-MM'
                             else:
-                                lastRealTimestamp_dt = datetime.strptime(lastRealTimestamp.split(" ")[0], "%Y-%m-%d")
-                                timestamp_dt = datetime.strptime(timestamp.split(" ")[0], "%Y-%m-%d")
+                                lastRealTimestamp_dt = datetime.strptime(lastRealTimestamp.split("T")[0], "%Y-%m-%d")
+                                timestamp_dt = datetime.strptime(timestamp.split("T")[0], "%Y-%m-%d")
 
                             daysGap = (timestamp_dt - lastRealTimestamp_dt).days
                             if daysGap <= 1:
                                 processedData.append({
-                                    "timestamp": formatted_timestamp,
-                                    "production": lastRealProduction,
-                                    "consumption": lastRealConsumption,
-                                    "consumptionPredicted": lastRealConsumption,
-                                    "fvePredicted": lastRealProduction,
+                                    "timestamp": formattedTimestamp,
+                                    "Výroba FVE": lastRealProduction,
+                                    "Spotřeba": lastRealConsumption,
+                                    "Predikovaná spotřeba": lastRealConsumption,
+                                    "Predikovaná výroba FVE": lastRealProduction,
                                 })
                         except ValueError:
                             pass  # ✅ Pokud není formát správný, přeskočíme
 
                 processedData.append({
-                    "timestamp": formatted_timestamp,  # ✅ Formátované pro všechny záznamy
-                    "production": None,
-                    "consumption": None,
-                    "consumptionPredicted": predictedConsumption,
-                    "fvePredicted": predictedProduction,
+                    "timestamp": formattedTimestamp,  # ✅ Formátované pro všechny záznamy
+                    "Výroba FVE": None,
+                    "Spotřeba": None,
+                    "Predikovaná spotřeba": predictedConsumption,
+                    "Predikovaná výroba FVE": predictedProduction,
                 })
 
         self.chartData = processedData
@@ -139,7 +143,7 @@ class MainChartState(rx.State):
         """shiftDate"""
         conn = getDb()
         cursor = conn.cursor()
-        query = "SELECT MIN(SUBSTR(date, 1, 4)), MAX(SUBSTR(date, 1, 4)) FROM energyData"
+        query = "SELECT MIN(strftime('%Y', timestamp)), MAX(strftime('%Y', timestamp)) FROM energyData"
         cursor.execute(query)
         minYear, maxYear = cursor.fetchone()
         conn.close()
@@ -156,14 +160,14 @@ class MainChartState(rx.State):
         else:
             dateObj = datetime.strptime(self.currentDate, "%Y-%m-%d")
 
-            if self.selectedInterval == "year":
+            if self.selectedInterval == "roční":
                 newYear = dateObj.year - 1 if direction == "prev" else dateObj.year + 1
                 if minYear <= newYear <= maxYear:
                     dateObj = dateObj.replace(year=newYear, month=1, day=1)
                 else:
                     return
 
-            elif self.selectedInterval == "month":
+            elif self.selectedInterval == "měsíční":
                 month = dateObj.month - 1 if direction == "prev" else dateObj.month + 1
                 year = dateObj.year
                 if month == 0:
@@ -178,12 +182,12 @@ class MainChartState(rx.State):
                 else:
                     return
 
-            elif self.selectedInterval == "week":
+            elif self.selectedInterval == "týdenní":
                 delta = timedelta(weeks=1)
                 dateObj -= delta if direction == "prev" else -delta
                 dateObj -= timedelta(days=dateObj.weekday())
 
-            elif self.selectedInterval == "day":
+            elif self.selectedInterval == "denní":
                 delta = timedelta(days=1)
                 dateObj -= delta if direction == "prev" else -delta
 
@@ -194,20 +198,22 @@ class MainChartState(rx.State):
     def formatXAxisTicks(self, value):
         """formatXAxisTicks"""
         try:
-            if self.selectedInterval == "year":
+            if self.selectedInterval == "roční":
                 return str(int(value.split("-")[1]))
 
-            elif self.selectedInterval == "month":
+            elif self.selectedInterval == "měsíční":
                 return str(int(value.split("-")[-1]))
 
-            elif self.selectedInterval == "week":
+            elif self.selectedInterval == "týdenní":
+                date_part = value.split("T")[0]
+                day = datetime.strptime(date_part, "%Y-%m-%d").weekday()
                 days = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
-                dayNumber = int(value.split("-")[-1].split(" ")[0])
-                return days[dayNumber % 7]
+                return days[day]
 
-            elif self.selectedInterval == "day":
-                hour = value.split(" ")[-1]
-                return f"{int(hour):02d}:00"
+            elif self.selectedInterval == "denní":
+                time_part = value.split("T")[-1]
+                hour = int(time_part.split(":")[0])
+                return f"{hour:02d}:00"
 
         except ValueError:
             return str(value)
@@ -216,16 +222,16 @@ class MainChartState(rx.State):
 
     def updateDisplayedInterval(self):
         """updateDisplayedInterval"""
-        if self.selectedInterval == "year":
+        if self.selectedInterval == "roční":
             self.displayedInterval = self.currentDate[:4]
-        elif self.selectedInterval == "month":
+        elif self.selectedInterval == "měsíční":
             self.displayedInterval = f"{self.currentDate[:7]}-01 až {self.currentDate[:7]}-31"
-        elif self.selectedInterval == "week":
+        elif self.selectedInterval == "týdenní":
             startDate = datetime.strptime(self.currentDate, "%Y-%m-%d")
             startWeek = startDate - timedelta(days=startDate.weekday())
             endWeek = startWeek + timedelta(days=6)
             self.displayedInterval = f"{startWeek.strftime('%Y-%m-%d')} až {endWeek.strftime('%Y-%m-%d')}"
-        elif self.selectedInterval == "day":
+        elif self.selectedInterval == "denní":
             self.displayedInterval = self.currentDate
 
     def setSelectedInterval(self, interval: str):
@@ -255,7 +261,7 @@ def mainChart():
                     ),
                     rx.spacer(),
                     rx.select(
-                        ["day", "week", "month", "year"],
+                        ["denní", "týdenní", "měsíční", "roční"],
                         value=MainChartState.selectedInterval,
                         on_change=MainChartState.setSelectedInterval,
                     ),
@@ -264,7 +270,7 @@ def mainChart():
                 ),
                 rx.recharts.area_chart(
                     rx.recharts.area(
-                        data_key="consumption",
+                        data_key="Spotřeba",
                         stroke=styles.graphConsumptionColor,
                         stroke_width=2,
                         fill=styles.graphConsumptionFill,
@@ -272,7 +278,7 @@ def mainChart():
                         dot=False,
                     ),
                     rx.recharts.area(
-                        data_key="production",
+                        data_key="Výroba FVE",
                         stroke=styles.graphProductionColor,
                         stroke_width=2,
                         fill=styles.graphProductionFill,
@@ -280,7 +286,7 @@ def mainChart():
                         dot=False,
                     ),
                     rx.recharts.area(
-                        data_key="consumptionPredicted",
+                        data_key="Predikovaná spotřeba",
                         stroke=styles.graphConsumptionPredictedColor,
                         stroke_width=2,
                         stroke_dasharray="5 5",
@@ -289,7 +295,7 @@ def mainChart():
                         dot=False,
                     ),
                     rx.recharts.area(
-                        data_key="fvePredicted",
+                        data_key="Predikovaná výroba FVE",
                         stroke=styles.graphProductionPredictedColor,
                         stroke_width=2,
                         stroke_dasharray="5 5",
