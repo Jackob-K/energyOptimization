@@ -111,7 +111,7 @@ def startupEvent():
     mqttThread.start()
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(runDailyPipeline, "cron", hour=14, minute=47)
+    scheduler.add_job(runDailyPipeline, "cron", hour=14, minute=47)         #ZDE SE NASTAVUJE ČAS SPOUŠTĚNÍ MODULŮ
     scheduler.start()
     logger.info("📅 Denní pipeline naplánována na 14:47")
 

@@ -255,7 +255,7 @@ def getEnergyData():
         """)
 
         return [
-            {"timestamp": row["date"], "production": row["fveProduction"], "consumption": row["consumption"]}
+            {"timestamp": row["timestamp"], "production": row["fveProduction"], "consumption": row["consumption"]}
             for row in cursor.fetchall()
         ]
 
