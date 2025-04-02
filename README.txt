@@ -45,6 +45,7 @@ Instalujeme větev "first-build"
 1. Klonování produkční větve:
     git clone -b first-build https://github.com/Jackob-K/energyOptimization.git
     cd energyOptimization
+    git checkout prod
 
 2. Vytvoření a aktivace virtuálního prostředí:
     python3 -m venv venv
