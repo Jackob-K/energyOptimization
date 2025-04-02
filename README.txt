@@ -208,5 +208,7 @@ Tento projekt využívá následující open-source knihovny:
 #                          LICENCE                         #
 ############################################################
 
-Tento projekt je dostupný pod licencí [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).  
-Pro komerční použití mě kontaktujte.
+Tento projekt je licencován pod [MIT licencí](LICENSE).
+
+> ⚠️ **Poznámka:** Projekt je určen primárně pro studijní a osobní účely.  
+> Pokud máte zájem o komerční využití, prosím kontaktujte mě: [koci.jakub@post.cz](mailto:koci.jakub@post.cz)

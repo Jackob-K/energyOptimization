@@ -1,179 +1,179 @@
 {
-    "date": "2025-04-02",
+    "date": "2025-04-03",
     "overrideMode": 0,
     "recommendedHours": [
         {
             "hour": 0,
-            "power_kW": 1.16,
-            "price": 69.27,
+            "power_kW": 1.0,
+            "price": 68.47,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 1,
-            "power_kW": 0.91,
-            "price": 68.67,
+            "power_kW": 0.83,
+            "price": 69.66,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 2,
-            "power_kW": 0.68,
-            "price": 68.58,
+            "power_kW": 0.59,
+            "price": 68.55,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 3,
-            "power_kW": 0.47,
-            "price": 70.01,
+            "power_kW": 0.44,
+            "price": 70.4,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 4,
-            "power_kW": 0.47,
-            "price": 71.02,
+            "power_kW": 0.46,
+            "price": 73.84,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 5,
             "power_kW": 0.68,
-            "price": 84.43,
+            "price": 95.81,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 6,
             "power_kW": 0,
-            "price": 117.5,
+            "price": 134.77,
             "batteryAction": "discharge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 7,
             "power_kW": 0,
-            "price": 152.77,
+            "price": 165.0,
             "batteryAction": "discharge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 8,
-            "power_kW": 0,
-            "price": 125.47,
-            "batteryAction": "discharge",
-            "batteryPowerTargetKw": 3.5
+            "power_kW": 1.78,
+            "price": 133.3,
+            "batteryAction": "idle",
+            "batteryPowerTargetKw": 0
         },
         {
             "hour": 9,
-            "power_kW": 1.73,
-            "price": 85.45,
+            "power_kW": 0.79,
+            "price": 79.11,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 10,
-            "power_kW": 4.16,
-            "price": 61.22,
-            "batteryAction": "charge",
-            "batteryPowerTargetKw": 3.5
+            "power_kW": 0,
+            "price": 41.0,
+            "batteryAction": "idle",
+            "batteryPowerTargetKw": 0
         },
         {
             "hour": 11,
             "power_kW": 3.5,
-            "price": 39.44,
+            "price": 0.19,
             "batteryAction": "charge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 12,
             "power_kW": 3.5,
-            "price": 31.11,
+            "price": -0.95,
             "batteryAction": "charge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 13,
             "power_kW": 3.5,
-            "price": 19.09,
+            "price": -7.15,
             "batteryAction": "charge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 14,
             "power_kW": 3.5,
-            "price": 17.03,
+            "price": -5.04,
             "batteryAction": "charge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 15,
             "power_kW": 3.5,
-            "price": 28.63,
+            "price": 1.15,
             "batteryAction": "charge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 16,
-            "power_kW": 0,
-            "price": 68.17,
-            "batteryAction": "idle",
-            "batteryPowerTargetKw": 0
+            "power_kW": 3.5,
+            "price": 25.91,
+            "batteryAction": "charge",
+            "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 17,
-            "power_kW": 1.09,
-            "price": 68.49,
+            "power_kW": 0.78,
+            "price": 79.02,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 18,
             "power_kW": 0,
-            "price": 105.0,
+            "price": 141.28,
             "batteryAction": "discharge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 19,
             "power_kW": 0,
-            "price": 141.27,
+            "price": 184.01,
             "batteryAction": "discharge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 20,
             "power_kW": 0,
-            "price": 127.01,
+            "price": 174.44,
             "batteryAction": "discharge",
             "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 21,
-            "power_kW": 1.24,
-            "price": 103.68,
-            "batteryAction": "idle",
-            "batteryPowerTargetKw": 0
+            "power_kW": 0,
+            "price": 139.91,
+            "batteryAction": "discharge",
+            "batteryPowerTargetKw": 3.5
         },
         {
             "hour": 22,
-            "power_kW": 0.99,
-            "price": 85.81,
+            "power_kW": 1.04,
+            "price": 114.52,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 23,
-            "power_kW": 1.07,
-            "price": 73.64,
+            "power_kW": 1.03,
+            "price": 105.62,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         },
         {
             "hour": 23,
-            "power_kW": 0.65,
-            "price": 73.64,
+            "power_kW": 0,
+            "price": 105.62,
             "batteryAction": "idle",
             "batteryPowerTargetKw": 0
         }
