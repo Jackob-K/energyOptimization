@@ -24,7 +24,7 @@ dbName = os.path.join(baseDir, "database.db")  # Cesta k databázi
 
 def getDb():
     """getDb"""
-    db = sqlite3.connect(dbName)
+    db = sqlite3.connect(dbName, check_same_thread=False)
     db.row_factory = sqlite3.Row
     return db
 

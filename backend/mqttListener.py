@@ -13,16 +13,12 @@ import sqlite3
 
 # Externí knihovny
 import paho.mqtt.client as mqtt
-from fastapi import APIRouter, HTTPException
 
 # Lokální importy
 from database import getDb
 
 # Logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# API router pro MQTT služby
-router = APIRouter()
 
 # Globální proměnné pro MQTT klienta
 mqttClient = None
@@ -97,7 +93,7 @@ def saveMqttSettings(newSettings):
 
     except sqlite3.Error as e:
         logging.error(f"❌ Chyba při ukládání MQTT nastavení: {e}")
-        raise HTTPException(status_code=500, detail="Chyba při ukládání do databáze")
+        raise Exception("Chyba při ukládání do databáze")
 
 def testMqttConnection(settingsData):
     """testMqttConnection"""
@@ -116,8 +112,12 @@ def testMqttConnection(settingsData):
 
 def restartMqttClient():
     """restartMqttClient"""
-    global mqttClient
-    settings = loadSettings()
+    global mqttClient, settings
+
+    if not settings:
+        settings = loadSettings()
+    else:
+        logging.info("ℹ️ Používám již načtené MQTT nastavení.")
 
     if mqttClient:
         mqttClient.disconnect()
@@ -160,7 +160,7 @@ def onMessage(client, userdata, msg):
 
         logging.info(f"📥 PŘEVEDENÁ JSON ZPRÁVA: {json.dumps(data, indent=2)}")
 
-        requiredKeys = {"date", "hour", "fveProduction", "consumption", "temperature"}
+        requiredKeys = {"timestamp", "fveProduction", "consumption", "temperature"}
         if requiredKeys.issubset(data.keys()):
             logging.info("✅ ZPRÁVA OBSAHUJE VŠECHNA POŽADOVANÁ DATA!")
             saveToDatabase(data)
@@ -174,42 +174,37 @@ def onMessage(client, userdata, msg):
 def saveToDatabase(data):
     """saveToDatabase"""
     try:
+        # Očekáváme timestamp např. "2025-03-29T14:00:00"
+        timestamp = data.get("timestamp")
+        if not timestamp:
+            raise ValueError("❌ Ve zprávě chybí pole 'timestamp'!")
+
         with getDb() as db:
             cursor = db.cursor()
             cursor.execute("""
-                INSERT INTO energyData (date, hour, fveProduction, consumption, temperature) 
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(date, hour) DO UPDATE SET
-                fveProduction = excluded.fveProduction,
-                consumption = excluded.consumption,
-                temperature = excluded.temperature
-            """, (data["date"], data["hour"], data["fveProduction"], data["consumption"], data["temperature"]))
+                INSERT INTO energyData (timestamp, fveProduction, consumption, temperature) 
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(timestamp) DO UPDATE SET
+                    fveProduction = excluded.fveProduction,
+                    consumption = excluded.consumption,
+                    temperature = excluded.temperature;
+            """, (
+                timestamp,
+                data.get("fveProduction"),
+                data.get("consumption"),
+                data.get("temperature")
+            ))
 
             db.commit()
+        logging.info(f"✅ Data uložena do DB: {timestamp}")
 
-        logging.info(f"✅ Data uložena: {data}")
-
-    except sqlite3.Error as e:
+    except (sqlite3.Error, ValueError) as e:
         logging.error(f"❌ Chyba při ukládání do databáze: {e}")
 
 def onDisconnect(client, userdata, rc):
     """onDisconnect"""
     logging.warning("⚠️ MQTT odpojeno.")
 
-@router.get("/get-mqtt-settings/")
-def getMqttSettings():
-    """getMqttSettings"""
-    return loadSettings()
-
-@router.post("/save-mqtt-settings/")
-async def saveMqttSettingsApi(data: dict):
-    """saveMqttSettingsApi"""
-    return saveMqttSettings(data)
-
-@router.post("/test-mqtt-connection/")
-async def testMqttConnectionApi(data: dict):
-    """testMqttConnectionApi"""
-    return testMqttConnection(data)
-
-if __name__ == "__main__":
+def startMqttListener():
+    logging.info("🚀 Spouštím MQTT listener...")
     restartMqttClient()

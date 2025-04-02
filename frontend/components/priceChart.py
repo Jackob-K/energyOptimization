@@ -26,8 +26,8 @@ class PriceChartState(rx.State):
         self.priceChartData = [
             {
                 "hour": int(row[0]) + 1,
-                "cena": row[1],
-                "množství": row[2]
+                "Cena [EUR/MWh]": row[1],
+                "Množství [MWh]": row[2]
             }
             for row in priceData
         ]
@@ -76,16 +76,16 @@ def priceChart():
                     spacing="4",
                 ),
 
-                # 📈 Graf ceny elektřiny (line chart) + Množství (bar chart)
+                # 📈 Graf ceny elektřiny (line chart) + Množství [MWh] (bar chart)
                 rx.recharts.composed_chart(
                     rx.recharts.line(
-                        data_key="cena",
+                        data_key="Cena [EUR/MWh]",
                         stroke=styles.graphPriceColor,
                         stroke_width=3,
                         dot=True,
                     ),
                     rx.recharts.bar(
-                        data_key="množství",
+                        data_key="Množství [MWh]",
                         fill=styles.graphQuantityFill, 
                         bar_size=15,
                         y_axis_id="right",
@@ -98,7 +98,7 @@ def priceChart():
                     rx.recharts.y_axis(
                         tick_line=False,
                         label={
-                            "value": "Cena (EUR/MWh)",
+                            "value": "Cena [EUR/MWh]",
                             "angle": -90,
                             "position": "outsideLeft",
                             "dx": -20,
@@ -110,7 +110,7 @@ def priceChart():
                         y_axis_id="right",
                         orientation="right",
                         label={
-                            "value": "Množství (MWh)",
+                            "value": "Množství [MWh]",
                             "angle": 90,
                             "position": "outsideRight",
                             "dx": 30,

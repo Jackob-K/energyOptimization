@@ -54,20 +54,24 @@ def fetchData():
         cursor.execute("""
             SELECT STRFTIME('%H', timestamp) as hour, price
             FROM energyPrices
-            WHERE DATE(timestamp) = ?
+            WHERE DATE(timestamp) = ? AND price IS NOT NULL
         """, (tomorrow,))
         priceRows = cursor.fetchall()
 
     if not energyData:
-        print("Chybí predikovaná data v `energyData` pro zítřek.")
+        print("❌ Chybí predikovaná data v `energyData` pro zítřek.")
         return None
 
     if not priceRows:
-        print("Chybí ceny v `energyPrices` pro zítřek.")
+        print("❌ Chybí ceny v `energyPrices` pro zítřek.")
         return None
 
     priceData = {int(row["hour"]): row["price"] for row in priceRows}
     pricesOnly = list(priceData.values())
+
+    if not pricesOnly:
+        print("❌ Nebyly nalezeny žádné validní ceny pro výpočet.")
+        return None
 
     lowThreshold = np.percentile(pricesOnly, 25)
     highThreshold = np.percentile(pricesOnly, 75)
@@ -78,9 +82,10 @@ def fetchData():
 def optimizeConsumption():
     fetched = fetchData()
     if not fetched:
-        print("Optimalizace neproběhla – chybějící data.")
+        print("❌ Optimalizace neproběhla – chybějící nebo nekompletní data.")
         return None
-    energyData, priceData, overrideMode, maxCharge, maxDischarge, lowThres, highThres = fetchData()
+
+    energyData, priceData, overrideMode, maxCharge, maxDischarge, lowThres, highThres = fetched
     schedule = []
     total_no_opt = 0
     total_opt = 0
@@ -90,10 +95,13 @@ def optimizeConsumption():
         hour = int(timestamp[11:13])
         consumption = row["consumptionPredicted"] or 0
         fve = row["fvePredicted"] or 0
+        price = priceData.get(hour)
+
+        if price is None:
+            print(f"⚠️ Přeskakuji hodinu {hour}: chybí cena.")
+            continue
 
         netConsumption = max(consumption - fve, 0)
-        price = priceData.get(hour, 0)
-
         baseline_cost = netConsumption * price / 1000
         total_no_opt += baseline_cost
 
@@ -133,12 +141,16 @@ def optimizeConsumption():
 
     return {"date": tomorrow, "overrideMode": overrideMode, "recommendedHours": schedule}
 
+
 def saveToJson(data):
     with open(jsonOutputPath, "w") as f:
         json.dump(data, f, indent=4)
     print(f"✅ Optimalizace uložena do {jsonOutputPath}")
 
-if __name__ == "__main__":
+def main():
     optimizedSchedule = optimizeConsumption()
     if optimizedSchedule:
         saveToJson(optimizedSchedule)
+
+if __name__ == "__main__":
+    main()

@@ -5,11 +5,13 @@ a připravuje data pro trénování ML modelu nebo je aktualizuje zpět do datab
 
 Vstup: Data z databáze energyData
 Výstup: Upravená data (X_train, X_test, y_train, y_test) nebo aktualizovaná tabulka processedData
-Spolupracuje s: backend.database.getDb
+Spolupracuje s: database.getDb
 """
 
 import pandas as pd
-from backend.database import getDb
+from database import getDb
+import requests
+import datetime
 
 def getHistoricalData():
     with getDb() as conn:
@@ -59,8 +61,6 @@ def prepareTrainTestData():
 
     print(f"Data připravena! Trénovací sada: {xTrain.shape}, Testovací sada: {xTest.shape}")
     print(f"Chybějící hodnoty po opravě:\n{xTrain.isnull().sum()}")
-    print("🧪 Sloupce použité při trénování:")
-    print(list(xTrain.columns)) 
     return xTrain, xTest, yTrain, yTest
 
 def updateProcessedData():
@@ -116,6 +116,71 @@ def updateProcessedData():
             ))
         conn.commit()
 
-if __name__ == "__main__":
+############################################################
+#       PROZATIMNÍ PŘEDPOVĚD POČASÍ NA 16 DNÍ DOPŘEDU      #
+############################################################
+def getFveCoordinates():
+    with getDb() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT latitude, longitude FROM fvePanels WHERE id = 1")
+        row = cursor.fetchone()
+        if row:
+            return row["latitude"], row["longitude"]
+        else:
+            raise ValueError("❌ FVE panel s ID 1 nebyl nalezen.")
+
+def fetchTemperatureForecast(lat, lon):
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude={lat}&longitude={lon}"
+        f"&hourly=temperature_2m"
+        f"&forecast_days=16"
+        f"&timezone=Europe/Prague"
+    )
+
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        times = data["hourly"]["time"]
+        temps = data["hourly"]["temperature_2m"]
+        return list(zip(times, temps))
+    else:
+        raise RuntimeError(f"❌ Chyba při načítání teplot: {response.status_code} - {response.text}")
+
+def saveTemperatures(forecast_data):
+    with getDb() as conn:
+        cursor = conn.cursor()
+
+        for time_str, temp in forecast_data:
+            timestamp = datetime.datetime.fromisoformat(time_str).replace(minute=0, second=0).isoformat(timespec="seconds")
+
+            if timestamp.endswith("T23:59:59"):
+                continue
+
+            cursor.execute("""
+                SELECT temperature FROM energyData WHERE timestamp = ?
+            """, (timestamp,))
+            existing = cursor.fetchone()
+
+            if existing:
+                cursor.execute("""
+                    UPDATE energyData SET temperature = ? WHERE timestamp = ?
+                """, (temp, timestamp))
+            else:
+                cursor.execute("""
+                    INSERT INTO energyData (timestamp, temperature)
+                    VALUES (?, ?)
+                """, (timestamp, temp))
+
+        conn.commit()
+        print(f"✅ Teploty z Open-Meteo byly úspěšně zapsány do tabulky energyData.")
+        
+def main():
+    lat, lon = getFveCoordinates()
+    forecast_data = fetchTemperatureForecast(lat, lon)
+    saveTemperatures(forecast_data)
     updateProcessedData()
     print("✅ Tabulka processedData byla úspěšně aktualizována!")
+
+if __name__ == "__main__":
+    main()

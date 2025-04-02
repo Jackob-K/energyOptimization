@@ -100,10 +100,10 @@ class MainChartState(rx.State):
                 lastRealTimestamp = timestamp
                 processedData.append({
                     "timestamp": formattedTimestamp,
-                    "Výroba FVE": production,
-                    "Spotřeba": realConsumption,
-                    "Predikovaná spotřeba": None,
-                    "Predikovaná výroba FVE": None,
+                    "Výroba FVE [kWh]": production,
+                    "Spotřeba [kWh]": realConsumption,
+                    "Predikovaná Spotřeba [kWh]": None,
+                    "Predikovaná výroba FVE [kWh]": None,
                 })
             else:
                 if not predictedStarted and lastRealConsumption is not None:
@@ -111,30 +111,38 @@ class MainChartState(rx.State):
                     if lastRealTimestamp is not None:
                         try:
                             if self.selectedInterval == "roční":
-                                lastRealTimestamp_dt = datetime.strptime(lastRealTimestamp, "%Y-%m")  # ✅ Opraveno pro 'YYYY-MM'
-                                timestamp_dt = datetime.strptime(timestamp, "%Y-%m")  # ✅ Opraveno pro 'YYYY-MM'
+                                lastRealTimestamp_dt = datetime.strptime(lastRealTimestamp, "%Y-%m")
+                                timestamp_dt = datetime.strptime(timestamp, "%Y-%m")
+                                monthGap = (timestamp_dt.year - lastRealTimestamp_dt.year) * 12 + (timestamp_dt.month - lastRealTimestamp_dt.month)
+                                if monthGap == 1:
+                                    processedData.append({
+                                        "timestamp": formattedTimestamp,
+                                        "Výroba FVE [kWh]": lastRealProduction,
+                                        "Spotřeba [kWh]": lastRealConsumption,
+                                        "Predikovaná Spotřeba [kWh]": lastRealConsumption,
+                                        "Predikovaná výroba FVE [kWh]": lastRealProduction,
+                                    })
                             else:
                                 lastRealTimestamp_dt = datetime.strptime(lastRealTimestamp.split("T")[0], "%Y-%m-%d")
                                 timestamp_dt = datetime.strptime(timestamp.split("T")[0], "%Y-%m-%d")
-
-                            daysGap = (timestamp_dt - lastRealTimestamp_dt).days
-                            if daysGap <= 1:
-                                processedData.append({
-                                    "timestamp": formattedTimestamp,
-                                    "Výroba FVE": lastRealProduction,
-                                    "Spotřeba": lastRealConsumption,
-                                    "Predikovaná spotřeba": lastRealConsumption,
-                                    "Predikovaná výroba FVE": lastRealProduction,
-                                })
+                                daysGap = (timestamp_dt - lastRealTimestamp_dt).days
+                                if daysGap <= 1:
+                                    processedData.append({
+                                        "timestamp": formattedTimestamp,
+                                        "Výroba FVE [kWh]": lastRealProduction,
+                                        "Spotřeba [kWh]": lastRealConsumption,
+                                        "Predikovaná Spotřeba [kWh]": lastRealConsumption,
+                                        "Predikovaná výroba FVE [kWh]": lastRealProduction,
+                                    })
                         except ValueError:
-                            pass  # ✅ Pokud není formát správný, přeskočíme
+                            pass
 
                 processedData.append({
                     "timestamp": formattedTimestamp,  # ✅ Formátované pro všechny záznamy
-                    "Výroba FVE": None,
-                    "Spotřeba": None,
-                    "Predikovaná spotřeba": predictedConsumption,
-                    "Predikovaná výroba FVE": predictedProduction,
+                    "Výroba FVE [kWh]": None,
+                    "Spotřeba [kWh]": None,
+                    "Predikovaná Spotřeba [kWh]": predictedConsumption,
+                    "Predikovaná výroba FVE [kWh]": predictedProduction,
                 })
 
         self.chartData = processedData
@@ -270,7 +278,7 @@ def mainChart():
                 ),
                 rx.recharts.area_chart(
                     rx.recharts.area(
-                        data_key="Spotřeba",
+                        data_key="Spotřeba [kWh]",
                         stroke=styles.graphConsumptionColor,
                         stroke_width=2,
                         fill=styles.graphConsumptionFill,
@@ -278,7 +286,7 @@ def mainChart():
                         dot=False,
                     ),
                     rx.recharts.area(
-                        data_key="Výroba FVE",
+                        data_key="Výroba FVE [kWh]",
                         stroke=styles.graphProductionColor,
                         stroke_width=2,
                         fill=styles.graphProductionFill,
@@ -286,7 +294,7 @@ def mainChart():
                         dot=False,
                     ),
                     rx.recharts.area(
-                        data_key="Predikovaná spotřeba",
+                        data_key="Predikovaná Spotřeba [kWh]",
                         stroke=styles.graphConsumptionPredictedColor,
                         stroke_width=2,
                         stroke_dasharray="5 5",
@@ -295,7 +303,7 @@ def mainChart():
                         dot=False,
                     ),
                     rx.recharts.area(
-                        data_key="Predikovaná výroba FVE",
+                        data_key="Predikovaná výroba FVE [kWh]",
                         stroke=styles.graphProductionPredictedColor,
                         stroke_width=2,
                         stroke_dasharray="5 5",

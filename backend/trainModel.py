@@ -5,7 +5,7 @@ vyhodnocuje jeho predikce a ukládá nejlepší model a metriky na disk.
 
 Vstup: Data připravená funkcí prepareTrainTestData()
 Výstup: Uložený nejlepší model v adresáři Models a metriky výkonu modelu
-Spolupracuje s: backend.database.getDb, backend.usagePrediction.prepareTrainTestData
+Spolupracuje s: database.getDb, usagePrediction.prepareTrainTestData
 """
 
 # Standardní knihovny
@@ -19,7 +19,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score
 
 # Lokální importy
-from backend.usagePrediction.dataProcessor import prepareTrainTestData
+from dataProcessor import prepareTrainTestData
 
 # Načtení trénovacích/testovacích dat
 xTrain, xTest, yTrain, yTest = prepareTrainTestData()
@@ -61,7 +61,7 @@ print(f"📌 R2 skóre: {r2:.4f}")
 print(f"📌 Nejlepší hyperparametry: {gridSearch.best_params_}")
 
 # Uložení modelu a metrik
-modelDir = "backend/usagePrediction/Models"
+modelDir = "backend/Models"
 os.makedirs(modelDir, exist_ok=True)
 
 modelPath = os.path.join(modelDir, "xgboostModel.pkl")

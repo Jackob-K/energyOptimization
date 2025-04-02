@@ -7,11 +7,20 @@ Spolupracuje s: database.
 """
 
 import datetime
+import re
 import requests
 from database import getDb
 
 # URL pro stažení dat
 apiUrl = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"
+
+def extract_date_from_title(title):
+    match = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", title)
+    if match:
+        day, month, year = map(int, match.groups())
+        return datetime.date(year, month, day)
+    else:
+        raise ValueError("❌ Nelze najít datum v názvu grafu.")
 
 def fetchPrices():
     response = requests.get(apiUrl)
@@ -20,7 +29,15 @@ def fetchPrices():
         return
 
     data = response.json()
-    tomorrow_date = datetime.date.today() + datetime.timedelta(days=1)
+
+    try:
+        title = data.get("graph", {}).get("title", "")
+        if not title:
+            raise ValueError("Chybí klíč 'title' v části 'graph'.")
+        target_date = extract_date_from_title(title)
+    except Exception as e:
+        print(f"❌ Chyba při získávání data z názvu grafu: {e}")
+        return
 
     energyData = {}
     priceData = {}
@@ -38,20 +55,19 @@ def fetchPrices():
     with getDb() as conn:
         cursor = conn.cursor()
 
-        # Zjistíme, kolik záznamů už existuje pro daný den
         cursor.execute("""
             SELECT COUNT(*) FROM energyPrices
             WHERE DATE(timestamp) = ?;
-        """, (tomorrow_date.isoformat(),))
+        """, (target_date.isoformat(),))
         existingCount = cursor.fetchone()[0]
 
         if existingCount > 0:
-            print(f"🔄 Data pro {tomorrow_date} již existují, aktualizuji je...")
+            print(f"🔄 Data pro {target_date} již existují, aktualizuji je...")
         else:
-            print(f"➕ Vkládám nové hodnoty pro {tomorrow_date}...")
+            print(f"➕ Vkládám nové hodnoty pro {target_date}...")
 
         for hour in range(24):
-            timestamp = datetime.datetime.combine(tomorrow_date, datetime.time(hour=hour)).isoformat()
+            timestamp = datetime.datetime.combine(target_date, datetime.time(hour=hour)).isoformat()
             cena = priceData.get(hour)
             mnozstvi = energyData.get(hour)
 
@@ -69,7 +85,7 @@ def fetchPrices():
 
         conn.commit()
 
-    print(f"✅ Ceny a množství elektřiny pro {tomorrow_date} byly úspěšně uloženy.")
+    print(f"✅ Ceny a množství elektřiny pro {target_date} byly úspěšně uloženy.")
 
 if __name__ == "__main__":
     fetchPrices()

@@ -8,7 +8,6 @@ Spolupracuje s: database, mqttListener.
 """
 
 # Standardní knihovny
-import os
 import base64
 import logging
 from datetime import datetime, timedelta
@@ -151,7 +150,7 @@ class MqttSettingsModel(BaseModel):
 @router.get("/get-mqtt-settings/")
 def getMqttSettings():
     """getMqttSettings"""
-    return mqttListener.getMqttSettings()
+    return mqttListener.loadSettings()
 
 @router.post("/save-mqtt-settings/")
 async def saveMqttSettings(data: MqttSettingsModel):

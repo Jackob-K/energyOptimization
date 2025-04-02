@@ -9,7 +9,6 @@ Spolupracuje s: Backend API pro upload souborů a nastavení MQTT.
 import httpx
 import reflex as rx
 import base64
-import requests
 from frontend.templates import template
 from frontend.components.card import card 
 
@@ -66,10 +65,10 @@ class MQTTSettingsState(rx.State):
         """updateField"""
         self.__dict__[key] = value  
 
-    def loadMqttSettings(self):
-        """loadMqttSettings"""
+    async def loadMqttSettings(self):
         try:
-            response = requests.get(f"{BACKEND_URL}/get-mqtt-settings/")
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{BACKEND_URL}/get-mqtt-settings/")
             if response.status_code == 200:
                 data = response.json()
                 for key in ["broker", "port", "topic", "username", "password"]:
@@ -81,19 +80,19 @@ class MQTTSettingsState(rx.State):
         except Exception as e:
             print(f"❌ Chyba API: {e}")
 
-    def saveMqttSettings(self):
-        """saveMqttSettings"""
+    async def saveMqttSettings(self):
         try:
-            response = requests.post(
-                f"{BACKEND_URL}/save-mqtt-settings/",
-                json={
-                    "broker": self.broker,
-                    "port": self.port,
-                    "topic": self.topic,
-                    "username": self.username,
-                    "password": self.password
-                }
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{BACKEND_URL}/save-mqtt-settings/",
+                    json={
+                        "broker": self.broker,
+                        "port": self.port,
+                        "topic": self.topic,
+                        "username": self.username,
+                        "password": self.password
+                    }
+                )
             if response.status_code == 200:
                 print("✅ MQTT nastavení uloženo")
                 return rx.window_alert("✅ MQTT nastavení bylo uloženo!")
@@ -102,19 +101,19 @@ class MQTTSettingsState(rx.State):
         except Exception as e:
             print(f"❌ Chyba API: {e}")
 
-    def testMqttConnection(self):
-        """testMqttConnection"""
+    async def testMqttConnection(self):
         try:
-            response = requests.post(
-                f"{BACKEND_URL}/test-mqtt-connection/",
-                json={
-                    "broker": self.broker,
-                    "port": self.port,
-                    "topic": self.topic,
-                    "username": self.username,
-                    "password": self.password
-                }
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{BACKEND_URL}/test-mqtt-connection/",
+                    json={
+                        "broker": self.broker,
+                        "port": self.port,
+                        "topic": self.topic,
+                        "username": self.username,
+                        "password": self.password
+                    }
+                )
             if response.status_code == 200:
                 self.connectionStatus = "✅ Připojení úspěšné"
             else:

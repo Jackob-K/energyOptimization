@@ -41,8 +41,8 @@ graphProductionFill = "rgba(30, 136, 229, 0.3)"
 graphPriceColor = "#FF9800"  # Oranžová čára pro cenu elektřiny
 graphPriceFill = "rgba(255, 152, 0, 0.3)"
 
-graphQuantityColor = "#4CAF50"  # Zelená pro množství
-graphQuantityFill = "rgba(76, 175, 80, 0.3)"
+graphQuantityColor = "#8E24AA"  # Fialová pro množství
+graphQuantityFill = "rgba(142, 36, 170, 0.3)"
 
 graphConsumptionPredictedColor = "#FFC107"  # Žlutá čára pro predikovanou spotřebu
 graphConsumptionPredictedFill = "rgba(255, 193, 7, 0.3)"

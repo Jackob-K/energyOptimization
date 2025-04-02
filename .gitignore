@@ -4,3 +4,10 @@ assets/external/
 *.db
 .states
 .web
+node_modules
+.git
+.vscode
+venv
+.DS_Store
+.json
+.pkl
