@@ -1,6 +1,20 @@
+"""
+Stránka Settings pro správu nastavení FVE, obecných parametrů a baterie.
+
+Vstup: Uživatel upravuje konfiguraci FVE polí, obecné hodnoty a bateriové parametry.
+Výstup: Změny jsou odeslány na backend ke zpracování.
+Spolupracuje s: Stavové třídy FveFieldState, GeneralSettingsState a BatterySettingsState.
+"""
+
 import reflex as rx
+import logging
 from frontend.templates import template
 from frontend.components.fveField import FveFieldState, fveFieldsForm
+from frontend.components.settingField import generateSettingComponent, BatterySettingsState, GeneralSettingsState
+
+# 🛠️ Logging
+enableLogging = 1
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 @template(
     route="/settings",
@@ -8,33 +22,52 @@ from frontend.components.fveField import FveFieldState, fveFieldsForm
     description="Manage your energy settings here."
 )
 def page() -> rx.Component:
-    return rx.container(
+    """
+    Hlavní komponenta pro stránku nastavení. Obsahuje sekce pro:
+    - FVE pole (dynamická formulářová pole)
+    - Obecné nastavení
+    - Nastavení baterií
+    """
+    if enableLogging:
+        logging.info("🚀 Stránka Settings byla načtena.")
 
-        # Rozložení FVE formuláře a Ovládacího panelu vedle sebe
-        rx.hstack(
-            # Kontejner pro FVE formulář + tlačítka
+    return rx.grid(
+        # 🧩 Tři komponenty – FVE, obecné, baterie
+        rx.box(
             rx.vstack(
                 rx.heading("Nastavení FVE", size="5"),
-                # Tlačítka umístěná pouze nad fveFieldsForm()
                 rx.hstack(
                     rx.button("Přidat další FVE", on_click=FveFieldState.add_field, size="3"),
                     rx.button("Uložit parametry", on_click=FveFieldState.submit_form, size="3", background="green", color="white"),
                     spacing="4",
-                    justify="start",  # Zarovnání tlačítek doleva
+                    justify="start",
                     width="100%",
                 ),
-                fveFieldsForm(),  # ✅ Formulář pro FVE pole
+                fveFieldsForm(),
                 spacing="4",
-                width="65%",  # Nastavení šířky formuláře
             ),
-            rx.vstack(
-                rx.heading("Obecné", size="5"),
-            ),
-            rx.vstack(
-                rx.heading("Globální úpravy", size="5"),
-                
-            )
         ),
 
-        on_mount=FveFieldState.loadFveData  # ✅ Správná reference na metodu
+        generateSettingComponent(
+            GeneralSettingsState,
+            [1, 2, 3],
+            "⚙️ Obecné",
+            "💾 Uložit obecné nastavení",
+            cardWidth="300px"
+        ),
+
+        generateSettingComponent(
+            BatterySettingsState,
+            [16, 17, 18, 19, 20, 21],
+            "🔋 Baterie",
+            "💾 Uložit baterii",
+            cardWidth="400px"
+        ),
+
+        # ✅ AŽ TEĎ přidáváme grid parametry
+        columns="repeat(3, auto)",
+        gap="32px",
+        align="start",
+        justify="start",
+        width="100%",
     )

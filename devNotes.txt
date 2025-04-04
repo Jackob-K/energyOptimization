@@ -1,0 +1,43 @@
+🛠️ Pravidla pro vývoj a úpravy v projektu MojeAplikace
+======================================================
+
+✅ 1. Styl pojmenování
+----------------------
+- V celém projektu používáme **camelCase** pro názvy proměnných, funkcí i parametrů.
+- Nepoužíváme snake_case ani PascalCase, aby byla zachována jednotnost.
+
+✅ 2. Komentáře a dokumentace
+----------------------------
+- Každý soubor obsahuje **hlavičkový komentář** s těmito informacemi:
+  - Co soubor dělá
+  - Vstupy a výstupy
+  - S čím spolupracuje
+- Každá funkce má **docstring** popisující její účel.
+- Komentáře v kódu píšeme **stručně a česky** pro snadné pochopení.
+
+✅ 3. Logování a výpisy
+-----------------------
+- Místo `print()` používáme knihovnu `logging`, pokud to není výslovně dočasný debug.
+- Používáme emoji v logech a konzoli pro rychlou orientaci:
+  - ✅ úspěch, ❌ chyba, 🚀 spuštění, 📊 data, 🔄 proces
+- `print()` je povolen pouze v `__main__` bloku nebo v konzolových skriptech.
+
+✅ 4. Čitelnost a struktura
+---------------------------
+- Bloky kódu logicky oddělujeme – mezery mezi sekcemi, komentáře nad funkcemi.
+- Dlouhé řetězce (např. URL) rozdělujeme do více řádků.
+- Všechny části musí být snadno čitelné i pro vývojáře, kteří projekt neznají.
+
+✅ 5. Zachování kompatibility
+-----------------------------
+- Neměníme strukturu dat, názvy polí ani formáty vstupů/výstupů, pokud jsou závislé na jiných modulech.
+- Úpravy musí být **zpětně kompatibilní**, pokud není důvod změnu provést napříč celou aplikací.
+
+✅ 6. Zaokrouhlování
+-------------------
+- Pokud data představují hodnoty pro člověka (např. kWh, ceny, predikce), **zaokrouhlujeme na 2 desetinná místa** při uložení nebo zobrazení.
+
+✅ 7. Requirements
+------------------
+- Starý `requirements.txt` lze smazat a vygenerovat znovu:
+  

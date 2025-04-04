@@ -7,33 +7,39 @@ Výstup: Aktualizovaná databáze, odpovědi na API požadavky.
 Spolupracuje s: database, mqttListener.
 """
 
-# Standardní knihovny
+# 📦 Standardní knihovny
 import base64
 import logging
 from datetime import datetime, timedelta
+from typing import List, Optional
 
-# Externí knihovny
+# 🌐 Externí knihovny
 import pandas as pd
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 
-# Lokální importy
+# 📁 Lokální moduly
 import database
 import mqttListener
 
-# Logger
+# 🛠️ Logging
+enableLogging = 1
 logger = logging.getLogger(__name__)
+if enableLogging:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# FastAPI router
+# 🚀 FastAPI router
 router = APIRouter()
 
-# Povinné sloupce v souboru
+# 📑 Globální konstanty
 requiredColumns = {"date", "hour", "consumption", "temperature", "fveProduction"}
 
+
+# 🧩 MODELY -----------------------------------------------------------------------
+
 class FveData(BaseModel):
-    """FveData"""
+    """Model pro jedno FVE pole"""
     id: Optional[int] = None
     latitude: float
     longitude: float
@@ -41,23 +47,44 @@ class FveData(BaseModel):
     azimuth: float
     power: float
 
+
 class SolarParams(BaseModel):
-    """SolarParams"""
+    """Model pro import více FVE polí"""
     fveFields: List[FveData]
 
-class FileUploadModel(BaseModel):
-    """FileUploadModel"""
-    filename: str
-    filedata: str
 
-class ProcessFileModel(BaseModel):
+class FileUploadModel(BaseModel):
+    """Model pro přenos souboru"""
     filename: str
     filedata: str  # base64 string
 
+
+class ProcessFileModel(BaseModel):
+    filename: str
+    filedata: str
+
+
+class MqttSettingsModel(BaseModel):
+    """Model pro MQTT nastavení"""
+    broker: str
+    port: int
+    topic: str
+    username: str
+    password: str
+
+
+class SettingItem(BaseModel):
+    id: int
+    value: str
+
+
+# 📤 UPLOAD A ZPRACOVÁNÍ SOUBORŮ -------------------------------------------------
+
 @router.post("/upload/")
 async def uploadFile(file: FileUploadModel):
-    """uploadFile"""
-    logger.info(f"✅ Přijímám soubor {file.filename}")
+    """Předá nahraný soubor endpointu pro zpracování"""
+    if enableLogging:
+        logger.info(f"📂 Přijímám soubor {file.filename}")
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -66,22 +93,24 @@ async def uploadFile(file: FileUploadModel):
         )
 
     if response.status_code == 200:
-        logger.info(f"✅ Soubor {file.filename} úspěšně zpracován!")
+        if enableLogging:
+            logger.info(f"✅ Soubor {file.filename} úspěšně zpracován!")
     else:
-        logger.error(f"❌ Chyba při zpracování souboru: {response.text}")
+        if enableLogging:
+            logger.error(f"❌ Chyba při zpracování souboru: {response.text}")
 
     return response.json()
 
 
 @router.post("/process-file/")
 async def processUploadedFile(payload: ProcessFileModel):
-    """processUploadedFile"""
+    """Zpracuje nahraný soubor a uloží do databáze"""
     try:
-        logger.info(f"🔄 Zpracovávám soubor z paměti: {payload.filename}")
+        if enableLogging:
+            logger.info(f"🔄 Zpracovávám soubor z paměti: {payload.filename}")
 
         decoded = base64.b64decode(payload.filedata)
 
-        # Načtení přímo z paměti (bez ukládání)
         if payload.filename.endswith(".csv"):
             from io import StringIO
             df = pd.read_csv(StringIO(decoded.decode("utf-8")))
@@ -107,18 +136,21 @@ async def processUploadedFile(payload: ProcessFileModel):
         )
 
         df = df[["timestamp", "fveProduction", "consumption", "temperature"]]
-
         database.saveHistoricalData(df)
 
         return {"message": "✅ Data byla úspěšně nahrána a uložena!"}
 
     except Exception as e:
+        if enableLogging:
+            logger.exception("❌ Výjimka při zpracování souboru")
         raise HTTPException(status_code=500, detail=f"❌ Chyba při zpracování: {str(e)}")
 
 
+# ⚙️ FVE NASTAVENÍ ---------------------------------------------------------------
+
 @router.post("/import-settings/")
 async def importSettings(solar_params: SolarParams):
-    """importSettings"""
+    """Uloží FVE pole do databáze"""
     updated_panels = []
     for fve in solar_params.fveFields:
         panel_id = database.saveFvePanel(
@@ -133,38 +165,89 @@ async def importSettings(solar_params: SolarParams):
 
     return {"message": "✅ Parametry FVE byly úspěšně uloženy", "saved_panels": updated_panels}
 
+
 @router.get("/get-settings/")
 async def getSettings():
-    """getSettings"""
-    data = database.getFveData()
-    return data
+    """Vrátí všechna uložená FVE data"""
+    return database.getFveData()
 
-class MqttSettingsModel(BaseModel):
-    """MqttSettingsModel"""
-    broker: str
-    port: int
-    topic: str
-    username: str
-    password: str
+
+# 📡 MQTT NASTAVENÍ --------------------------------------------------------------
 
 @router.get("/get-mqtt-settings/")
 def getMqttSettings():
-    """getMqttSettings"""
+    """Načte aktuální MQTT nastavení"""
     return mqttListener.loadSettings()
+
 
 @router.post("/save-mqtt-settings/")
 async def saveMqttSettings(data: MqttSettingsModel):
-    """saveMqttSettings"""
+    """Uloží MQTT nastavení"""
     try:
         mqttListener.saveMqttSettings(data.dict())
+        if enableLogging:
+            logger.info("✅ MQTT nastavení bylo uloženo")
         return {"message": "✅ MQTT nastavení bylo uloženo"}
     except Exception as e:
-        logger.error(f"❌ Chyba při ukládání MQTT nastavení: {e}")
+        if enableLogging:
+            logger.exception("❌ Chyba při ukládání MQTT")
         raise HTTPException(status_code=500, detail="Chyba při ukládání")
+
 
 @router.post("/test-mqtt-connection/")
 async def testMqttConnection(data: MqttSettingsModel):
-    """testMqttConnection"""
+    """Otestuje MQTT připojení"""
     return mqttListener.testMqttConnection(data.dict())
 
 
+# ⚙️ OBECNÉ NASTAVENÍ (settings tabulka) -----------------------------------------
+
+@router.post("/get-settings-values/")
+async def getSettingsValues(payload: dict):
+    """Vrátí nastavení pro zadaná ID včetně labelu a placeholderu."""
+    ids = payload.get("ids", [])
+    try:
+        with database.getDb() as db:
+            cursor = db.cursor()
+            query = f"""
+                SELECT id, paramName, value, label, placeHolder
+                FROM settings
+                WHERE id IN ({','.join('?' for _ in ids)})
+            """
+            cursor.execute(query, ids)
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": row["id"],
+                    "paramName": row["paramName"],
+                    "value": row["value"],
+                    "label": row["label"],
+                    "placeHolder": row["placeHolder"]
+                }
+                for row in rows
+            ]
+    except Exception as e:
+        if enableLogging:
+            logger.exception("❌ Chyba při načítání settings hodnot")
+        raise HTTPException(status_code=500, detail=f"❌ Chyba při načítání: {str(e)}")
+
+
+@router.post("/save-settings-values/")
+async def saveSettingsValues(payload: dict):
+    """Uloží více hodnot nastavení najednou."""
+    settings = payload.get("settings", [])
+    try:
+        with database.getDb() as db:
+            cursor = db.cursor()
+            for setting in settings:
+                setting_id = setting["id"]
+                value = setting["value"]
+                cursor.execute("UPDATE settings SET value = ? WHERE id = ?", (value, setting_id))
+            db.commit()
+            if enableLogging:
+                logger.info("✅ Obecné nastavení bylo uloženo")
+            return {"message": "✅ Nastavení byla uložena"}
+    except Exception as e:
+        if enableLogging:
+            logger.exception("❌ Chyba při ukládání settings")
+        raise HTTPException(status_code=500, detail=f"❌ Chyba při ukládání: {str(e)}")

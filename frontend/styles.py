@@ -52,10 +52,10 @@ graphProductionPredictedFill = "rgba(233, 30, 99, 0.3)"
 
 # ✅ Styl pro karty
 cardStyle = {
-    "background": cardBackground,
+    "background": cardBackground,     # Pokud máš vlastní proměnnou
     "border_radius": "12px",
     "padding": "16px",
-    "box_shadow": "0 4px 10px rgba(0, 0, 0, 0.1)",
+    "border": "1px solid #ccc",       # ← jemné šedé ohraničení
 }
 
 # ✅ Styly pro šablony

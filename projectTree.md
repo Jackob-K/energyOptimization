@@ -1,6 +1,9 @@
 
 ```
 MojeAplikace
+├─ LICENSE
+├─ README.txt
+├─ assets
 ├─ backend
 │  ├─ Models
 │  ├─ __init__.py
@@ -14,6 +17,7 @@ MojeAplikace
 │  ├─ scrape.py
 │  ├─ trainModel.py
 │  └─ usagePrediction.py
+├─ devNotes.txt
 ├─ frontend
 │  ├─ components
 │  │  ├─ card.py
@@ -21,6 +25,7 @@ MojeAplikace
 │  │  ├─ mainChart.py
 │  │  ├─ navbar.py
 │  │  ├─ priceChart.py
+│  │  ├─ settingField.py
 │  │  └─ sidebar.py
 │  ├─ frontend.py
 │  ├─ pages
@@ -33,6 +38,7 @@ MojeAplikace
 │     ├─ __init__.py
 │     └─ template.py
 ├─ requirements.txt
-└─ rxconfig.py
+├─ rxconfig.py
+└─ uploaded_files
 
 ```

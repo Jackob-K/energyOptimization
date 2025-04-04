@@ -14,8 +14,7 @@ Využívá framework Reflex (kombinace frontendu a backendu v Pythonu) a je rozd
 1) Podle sekce "INSTALACE NA RASPBERRY PI" naklonujte github repozitář na Raspberry PI a nainstalujte si potřebné knihovny
 2) Spusťte aplikaci podle sekce "SPUŠTĚNÍ APLIKACE"
     2a) Aplikace při prvním spuštění automaticky vytvoří databázi (database.db), která obsahuje prázdné tabulky a je nutné je doplnit viz sekce "TABULKY DATABÁZE"
-        (Nutno případně znát příkazy pro práci s sqlite3 viz sekce "SQLITE3")
-        !!!NUTNÉ DO DATABÁZE VLOŽIT NASTAVENÍ!!!
+        Tabulky lze doplnit skrze UI na stránkách "Datafeed" a "Settings"
 3) Nahrajte data pomocí UI na stránce "Datafeed" kliknutím a vybrání souboru s historickými daty
     (ideálně zatím nahrávat data s celými hodnotami => nevím, zda mám ošetřeno nahrávání timestampů s různými časy)
     Struktura dat historického souboru viz sekce "STRUKTURA TABULKY S HISTORICKÝMI DATY"
@@ -48,7 +47,7 @@ Instalujeme větev "first-build"
 
 2. Vytvoření a aktivace virtuálního prostředí:
     python3 -m venv venv
-    source venv/bin/activate
+    source venv/bin/activate 
 
 3. Instalace závislostí:
     pip install -r requirements.txt
@@ -96,7 +95,7 @@ Databáze je rozdělena na několik tabulek viz níže:
 •	optimizationLog – obsahuje záznamy o finančním přínosu baterie v jednotlivých dnech
                     – vytvářena automaticky a je dostupná na adrese backendu "/optimizedSchedule" viz sekce "SPUŠTĚNÍ APKIKACE"
 
-•   Při prvním spuštění nutno doplnit tabulky energyData, fvePanels a settings
+•   Při prvním spuštění nutno doplnit tabulky energyData, fvePanels a settings, ideálně skrze UI
 
 
 ############################################################
@@ -116,7 +115,8 @@ Nutné dodržet sloupce a jejich formáty (v finále jediný striktní požadave
 #              PRÁCE S DATABÁZÍ POMOCÍ SQLITE3             #
 ############################################################
 
-Vložení informací do tabulky "settings"
+Vložení informací do tabulky "settings", alternativně lze skrze UI
+Nově funkční pro tabulky settings a fvePanels
 
 1) Přejděte do hlavní složky projektu (u mě MojeAplikace)
 2) V terminálu se přihlaste do databáze pomocí příkazu "sqlite3 backedn/database.db"
@@ -141,7 +141,6 @@ Vložení informací do tabulky "settings"
     INSERT INTO parameters (id, paramName, value) VALUES (25, rezerva, '');
     INSERT INTO parameters (id, paramName, value) VALUES (26, 'daysToPredict', '16');
 
-4) Nastavení mqtt lze jako jediné zatím upravovat skrze UI na stránce "Datafeed"
 To be continued...
 
 

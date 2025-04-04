@@ -94,50 +94,69 @@ class FveFieldState(rx.State):
 
 def fveFieldsForm() -> rx.Component:
     """Vrací komponentu s FVE poli"""
-    return rx.vstack(
-        rx.foreach(
-            FveFieldState.fveFields,
-            lambda fve, index: card(
-                rx.heading(f"FVE {index + 1}", size="3"),
+    return rx.box(  # ✅ Přidá obal s max_width
+        rx.vstack(
+            rx.foreach(
+                FveFieldState.fveFields,
+                lambda fve, index: card(
+                    rx.heading(f"FVE {index + 1}", size="3"),
 
-                rx.grid(
-                    rx.text("Zeměpisná šířka:", size="3"),
-                    rx.input(placeholder="Zeměpisná šířka", name=f"latitude_{index}", value=fve["latitude"], 
-                             on_change=lambda val, idx=index: FveFieldState.update_field(idx, "latitude", val)),
-
-                    rx.text("Zeměpisná délka:", size="3"),
-                    rx.input(placeholder="Zeměpisná délka", name=f"longitude_{index}", value=fve["longitude"], 
-                             on_change=lambda val, idx=index: FveFieldState.update_field(idx, "longitude", val)),
-
-                    rx.text("Náklon panelů (°):", size="3"),
-                    rx.input(placeholder="Náklon panelů (°)", name=f"tilt_{index}", value=fve["tilt"], 
-                             on_change=lambda val, idx=index: FveFieldState.update_field(idx, "tilt", val)),
-
-                    rx.text("Orientace panelů (°):", size="3"),
-                    rx.input(placeholder="Orientace panelů (°)", name=f"azimuth_{index}", value=fve["azimuth"], 
-                             on_change=lambda val, idx=index: FveFieldState.update_field(idx, "azimuth", val)),
-
-                    rx.text("Výkon této části (kWp):", size="3"),
-                    rx.input(placeholder="Výkon této části (kWp)", name=f"power_{index}", value=fve["power"], 
-                             on_change=lambda val, idx=index: FveFieldState.update_field(idx, "power", val)),
-
-                    spacing="3",
-                    columns="1fr 1fr",
-                    width="100%",
-                ),
-
-                rx.box(
-                    rx.cond(
-                        FveFieldState.fveFields.length() > 1,
-                        rx.button("Odstranit pole", on_click=lambda idx=index: FveFieldState.remove_field(idx), 
-                                style={"background": "red", "color": "white"})
+                    rx.grid(
+                        rx.text("Zeměpisná šířka:", size="3"),
+                        rx.input(
+                            placeholder="Zeměpisná šířka",
+                            name=f"latitude_{index}",
+                            value=fve["latitude"],
+                            on_change=lambda val, idx=index: FveFieldState.update_field(idx, "latitude", val),
+                        ),
+                        rx.text("Zeměpisná délka:", size="3"),
+                        rx.input(
+                            placeholder="Zeměpisná délka",
+                            name=f"longitude_{index}",
+                            value=fve["longitude"],
+                            on_change=lambda val, idx=index: FveFieldState.update_field(idx, "longitude", val),
+                        ),
+                        rx.text("Náklon panelů (°):", size="3"),
+                        rx.input(
+                            placeholder="Náklon panelů (°)",
+                            name=f"tilt_{index}",
+                            value=fve["tilt"],
+                            on_change=lambda val, idx=index: FveFieldState.update_field(idx, "tilt", val),
+                        ),
+                        rx.text("Orientace panelů (°):", size="3"),
+                        rx.input(
+                            placeholder="Orientace panelů (°)",
+                            name=f"azimuth_{index}",
+                            value=fve["azimuth"],
+                            on_change=lambda val, idx=index: FveFieldState.update_field(idx, "azimuth", val),
+                        ),
+                        rx.text("Výkon této části (kWp):", size="3"),
+                        rx.input(
+                            placeholder="Výkon této části (kWp)",
+                            name=f"power_{index}",
+                            value=fve["power"],
+                            on_change=lambda val, idx=index: FveFieldState.update_field(idx, "power", val),
+                        ),
+                        spacing="3",
+                        columns="1fr 1fr",
+                        width="100%",
                     ),
-                    margin_top="10px",
-                    justify="end",
-                ),
 
-                flex="1",
-            )
+                    rx.box(
+                        rx.cond(
+                            FveFieldState.fveFields.length() > 1,
+                            rx.button("Odstranit pole", on_click=lambda idx=index: FveFieldState.remove_field(idx),
+                                      style={"background": "red", "color": "white"})
+                        ),
+                        margin_top="10px",
+                        justify="end",
+                    ),
+
+                    flex="1",
+                )
+            ),
+            spacing="6",
         ),
-        spacing="6",
+        width="100%",
+        max_width="500px",  # ✅ Omezí šířku
     )

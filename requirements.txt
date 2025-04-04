@@ -11,3 +11,5 @@ Requests==2.32.3
 scikit_learn==1.6.1
 uvicorn==0.34.0
 xgboost==3.0.0
+
+reflex==0.7.5

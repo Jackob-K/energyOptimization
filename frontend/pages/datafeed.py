@@ -9,19 +9,34 @@ Spolupracuje s: Backend API pro upload souborů a nastavení MQTT.
 import httpx
 import reflex as rx
 import base64
+import asyncio
+import logging
 from frontend.templates import template
-from frontend.components.card import card 
+from frontend.components.card import card
+from frontend.components.settingField import generateSettingComponent, MqttSettingsState
 
+# 🌐 Backend adresa
 BACKEND_URL = "http://localhost:8000"
 
+# 🛠️ Logging nastavení
+enableLogging = 1
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 class FileUploadState(rx.State):
-    """FileUploadState"""
+    """Stav pro nahrávání souboru"""
     fileName: str = ""
     uploading: bool = False
+    touched: bool = False
+
+    @rx.event
+    async def checkIfTouched(self):
+        await asyncio.sleep(2)  # čekej 2s po nahrání stránky
+        if self.fileName == "":
+            self.touched = True
 
     @rx.event(background=True)
     async def handleUpload(self, files: list[rx.UploadFile]):
-        """handleUpload"""
+        """Zpracuje nahrávání souboru"""
         async with self:
             if self.uploading:
                 return
@@ -42,18 +57,22 @@ class FileUploadState(rx.State):
                 async with self:
                     if response.status_code == 200:
                         self.fileName = fileName
-                        print(f"✅ Soubor {fileName} úspěšně nahrán!")
+                        if enableLogging:
+                            logging.info(f"✅ Soubor {fileName} úspěšně nahrán!")
                     else:
-                        print(f"❌ Chyba při nahrávání: {response.text}")
+                        if enableLogging:
+                            logging.error(f"❌ Chyba při nahrávání: {response.text}")
 
         except Exception as e:
-            print(f"❌ Chyba v handleUpload: {e}")
+            if enableLogging:
+                logging.exception(f"❌ Chyba v handleUpload: {e}")
 
         async with self:
             self.uploading = False
 
+
 class MQTTSettingsState(rx.State):
-    """MQTTSettingsState"""
+    """Stav pro MQTT nastavení"""
     broker: str = "test.mosquitto.org"
     port: int = 1883
     topic: str = "energy/data"
@@ -62,10 +81,11 @@ class MQTTSettingsState(rx.State):
     connectionStatus: str = "❓ Neznámý stav"
 
     def updateField(self, key: str, value: str):
-        """updateField"""
+        """Aktualizuje hodnotu pole podle klíče"""
         self.__dict__[key] = value  
 
     async def loadMqttSettings(self):
+        """Načte MQTT nastavení z backendu"""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{BACKEND_URL}/get-mqtt-settings/")
@@ -74,13 +94,17 @@ class MQTTSettingsState(rx.State):
                 for key in ["broker", "port", "topic", "username", "password"]:
                     if key in data and data[key] is not None:
                         setattr(self, key, data[key])
-                print("✅ MQTT nastavení načteno")
+                if enableLogging:
+                    logging.info("✅ MQTT nastavení načteno")
             else:
-                print("❌ Chyba při načítání MQTT nastavení")
+                if enableLogging:
+                    logging.error("❌ Chyba při načítání MQTT nastavení")
         except Exception as e:
-            print(f"❌ Chyba API: {e}")
+            if enableLogging:
+                logging.exception(f"❌ Chyba API: {e}")
 
     async def saveMqttSettings(self):
+        """Uloží MQTT nastavení na backend"""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -94,14 +118,18 @@ class MQTTSettingsState(rx.State):
                     }
                 )
             if response.status_code == 200:
-                print("✅ MQTT nastavení uloženo")
+                if enableLogging:
+                    logging.info("✅ MQTT nastavení uloženo")
                 return rx.window_alert("✅ MQTT nastavení bylo uloženo!")
             else:
-                print("❌ Chyba při ukládání MQTT nastavení")
+                if enableLogging:
+                    logging.error("❌ Chyba při ukládání MQTT nastavení")
         except Exception as e:
-            print(f"❌ Chyba API: {e}")
+            if enableLogging:
+                logging.exception(f"❌ Chyba API: {e}")
 
     async def testMqttConnection(self):
+        """Otestuje MQTT připojení"""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -120,7 +148,9 @@ class MQTTSettingsState(rx.State):
                 self.connectionStatus = "❌ Připojení selhalo"
         except Exception as e:
             self.connectionStatus = "❌ Chyba při připojení"
-            print(f"❌ Chyba API: {e}")
+            if enableLogging:
+                logging.exception(f"❌ Chyba API: {e}")
+
 
 @template(
     route="/datafeed",
@@ -128,16 +158,14 @@ class MQTTSettingsState(rx.State):
     description="Stránka pro nahrávání souborů a správu MQTT."
 )
 def page() -> rx.Component:
-    """page"""
+    """Hlavní komponenta stránky"""
     return rx.hstack(
         rx.container(
-            rx.heading("📂 Nahrajte soubor pro zpracování", size="4", margin_bottom="10px"),
             card(
+                rx.heading("📂 Nahrajte soubor pro zpracování", size="4", margin_bottom="10px"),
                 rx.vstack(
                     rx.upload(
-                        rx.vstack(
-                            rx.text("Přetáhněte nebo klikněte pro výběr .csv / .xlsx"),
-                        ),
+                        rx.vstack(rx.text("Přetáhněte nebo klikněte pro výběr .csv / .xlsx"), width="105%"),
                         id="upload_xlsx",
                         multiple=False,
                         accept={
@@ -147,73 +175,38 @@ def page() -> rx.Component:
                         max_files=1,
                         on_drop=FileUploadState.handleUpload,
                     ),
-                    rx.hstack(
-                        rx.cond(FileUploadState.fileName != "", rx.text(f"📄 {FileUploadState.fileName}"), rx.text("❌ Žádný soubor nenahrán")),
-                        rx.cond(FileUploadState.uploading, rx.text("⏳ Nahrávání..."), rx.text("✅ Hotovo!")),
-                        spacing="2",
+
+                    rx.cond(
+                        FileUploadState.uploading,
+                        rx.text("⏳ Nahrávání..."),
+                        rx.cond(
+                            FileUploadState.fileName != "",
+                            rx.text("✅ Hotovo!"),
+                            rx.cond(
+                                FileUploadState.touched,
+                                rx.text("❌ Žádný soubor nenahrán"),
+                                rx.text("")  # Pokud se nic nedělo, nezobrazuj nic
+                            )
+                        )
                     ),
-                    spacing="4",
-                    align="center",
                 ),
             ),
-            flex="1",
+            width="400px"
         ),
         rx.container(
-            rx.heading("🔧 Nastavení MQTT", size="4", margin_bottom="10px"),
-            card(
-                rx.grid(
-                    rx.text("Adresa Brokera:", min_width="150px"),  
-                    rx.input(
-                        placeholder="Zadejte adresu brokera",
-                        value=MQTTSettingsState.broker, 
-                        on_change=lambda val: MQTTSettingsState.updateField("broker", val),
-                        width="250px",
-                    ),
-                    rx.text("Port:", min_width="150px"),
-                    rx.input(
-                        placeholder="Např. 1883",
-                        value=MQTTSettingsState.port, 
-                        on_change=lambda val: MQTTSettingsState.updateField("port", val),
-                        width="100px",
-                    ),
-                    rx.text("Téma:", min_width="150px"),
-                    rx.input(
-                        placeholder="Zadejte MQTT topic",
-                        value=MQTTSettingsState.topic, 
-                        on_change=lambda val: MQTTSettingsState.updateField("topic", val),
-                        width="250px",
-                    ),
-                    rx.text("Uživatel:", min_width="150px"),
-                    rx.input(
-                        placeholder="Zadejte uživatelské jméno",
-                        value=MQTTSettingsState.username, 
-                        on_change=lambda val: MQTTSettingsState.updateField("username", val),
-                        width="250px",
-                    ),
-                    rx.text("Heslo:", min_width="150px"),
-                    rx.input(
-                        placeholder="Zadejte heslo",
-                        value=MQTTSettingsState.password, 
-                        type="password",
-                        on_change=lambda val: MQTTSettingsState.updateField("password", val),
-                        width="250px",
-                    ),
-                    spacing="2",
-                    columns="auto 1fr",
-                    width="100%",
-                ),
-                rx.hstack(
-                    rx.button("💾 Uložit nastavení", on_click=MQTTSettingsState.saveMqttSettings, background="green", color="white"),
-                    rx.button("🔍 Test připojení", on_click=MQTTSettingsState.testMqttConnection),
-                    spacing="4",
-                    margin_top="20px",
-                    margin_bottom="20px",
-                ),
-                rx.text(MQTTSettingsState.connectionStatus, size="4"),
+            generateSettingComponent(MqttSettingsState, [11, 12, 13, 14, 15], "📡 MQTT", "💾 Uložit MQTT nastavení", cardWidth="350px"),
+            rx.hstack(
+                rx.button("🔍 Test připojení", on_click=MQTTSettingsState.testMqttConnection),
+                spacing="4",
+                margin_top="20px",
+                margin_bottom="20px",
             ),
-            flex="1",
+            rx.text(MQTTSettingsState.connectionStatus, size="4"),
         ),
         spacing="4",
         align="start",
-        on_mount=MQTTSettingsState.loadMqttSettings
+        on_mount=[
+            FileUploadState.checkIfTouched,
+            MQTTSettingsState.loadMqttSettings
+        ],
     )

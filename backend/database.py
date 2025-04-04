@@ -5,31 +5,41 @@ historickými energetickými daty a jejich predikcemi.
 Vstup: Data pro FVE panely, historická spotřeba energie, predikce.
 Výstup: Aktualizovaná databáze se správnými tabulkami a daty.
 Spolupracuje s: backend.database.getDb, backend.usagePrediction.dataProcessor.
-
 """
 
-# Standardní knihovny
+# 📦 Standardní knihovny
 import os
 import sqlite3
-from contextlib import closing
 import datetime
-
-# Externí knihovny
-import pandas as pd
+import logging
+from contextlib import closing
 from typing import Optional
 
-# Nastavení cesty na databázi relativně k `backend/`
-baseDir = os.path.dirname(os.path.abspath(__file__))  # Absolutní cesta ke složce backend/
-dbName = os.path.join(baseDir, "database.db")  # Cesta k databázi
+# 🌐 Externí knihovny
+import pandas as pd
+
+# 🛠️ Logging
+enableLogging = 1
+logger = logging.getLogger(__name__)
+if enableLogging:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# 📁 Umístění databáze
+baseDir = os.path.dirname(os.path.abspath(__file__))
+dbName = os.path.join(baseDir, "database.db")
+
+
+# 🔌 Připojení a inicializace databáze -----------------------------------------
 
 def getDb():
-    """getDb"""
+    """Vrátí připojení k databázi"""
     db = sqlite3.connect(dbName, check_same_thread=False)
     db.row_factory = sqlite3.Row
     return db
 
+
 def createDatabase():
-    """createDatabase"""
+    """Vytvoří všechny potřebné tabulky v databázi"""
     with getDb() as conn:
         cursor = conn.cursor()
 
@@ -37,9 +47,37 @@ def createDatabase():
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             paramName TEXT UNIQUE,
-            value TEXT
+            value TEXT,
+            placeHolder TEXT
         );
         """)
+
+        default_settings = [
+            (1, "breakerCurrentPerPhase", "Proud jističe [A]", "např. 25"),
+            (2, "phases", "Počet fází [1/3]", "např. 1 nebo 3"),
+            (3, "overrideMode", "Režim řízení [0/1]", "0 = automatický, 1 = ruční"),
+            (11, "mqttBroker", "MQTT broker", "např. test.mosquitto.org"),
+            (12, "mqttPort", "MQTT port", "např. 1883"),
+            (13, "mqttTopic", "MQTT topic", "např. energy/data"),
+            (14, "mqttUserName", "MQTT uživatel", "např. homeassistant"),
+            (15, "mqttPassword", "MQTT heslo", "••••••••••••"),
+            (16, "batteryCapacityKWh", "Kapacita baterie [kWh]", "např. 10"),
+            (17, "batteryEfficiency", "Účinnost baterie [0–1]", "např. 0.9"),
+            (18, "batteryMaxChargeKW", "Max. nabíjení [kW]", "např. 3.5"),
+            (19, "batteryMaxDischargeKW", "Max. vybíjení [kW]", "např. 3.5"),
+            (20, "batterySocMin", "Minimální SoC [%]", "např. 10"),
+            (21, "batterySocMax", "Maximální SoC [%]", "např. 90"),
+            (26, "daysToPredict", "Dny predikce [dní]", "max 16, např. 5"),
+        ]
+
+        for id_, param, label, placeholder in default_settings:
+            cursor.execute("""
+                INSERT INTO settings (id, paramName, label, placeHolder)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(paramName) DO UPDATE SET
+                    label = excluded.label,
+                    placeHolder = excluded.placeHolder;
+            """, (id_, param, label, placeholder))
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS fvePanels (
@@ -121,13 +159,17 @@ def createDatabase():
         """)
 
         conn.commit()
-        print("✅ Tabulky byly úspěšně vytvořeny nebo aktualizovány.")
+        if enableLogging:
+            logger.info("✅ Tabulky byly úspěšně vytvořeny nebo aktualizovány.")
+
+
+# ☀️ FVE Panely ----------------------------------------------------------------
 
 def saveFvePanel(panel_id: Optional[int], latitude: float, longitude: float, tilt: float, azimuth: float, power: float):
-    """saveFvePanel"""
+    """Uloží nebo aktualizuje FVE panel"""
     with closing(getDb()) as db, db:
         cursor = db.cursor()
-        
+
         if panel_id:
             cursor.execute("""
                 UPDATE fvePanels 
@@ -137,20 +179,21 @@ def saveFvePanel(panel_id: Optional[int], latitude: float, longitude: float, til
         else:
             cursor.execute("SELECT COUNT(*) FROM fvePanels")
             count = cursor.fetchone()[0]
-            newId = count + 1  
+            newId = count + 1
 
             cursor.execute("""
                 INSERT INTO fvePanels (id, latitude, longitude, tilt, azimuth, power) 
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (newId, latitude, longitude, tilt, azimuth, power))
-            
-            panel_id = newId  
-        
+
+            panel_id = newId
+
         db.commit()
         return panel_id
 
+
 def getFveData():
-    """getFveData"""
+    """Vrátí seznam FVE panelů a celkový výkon"""
     with closing(getDb()) as db:
         cursor = db.cursor()
 
@@ -176,8 +219,9 @@ def getFveData():
             ]
         }
 
+
 def deleteFvePanel(panel_id: int):
-    """deleteFvePanel"""
+    """Smaže FVE panel a přepočítá ID"""
     with closing(getDb()) as db, db:
         cursor = db.cursor()
 
@@ -185,12 +229,15 @@ def deleteFvePanel(panel_id: int):
         existing = cursor.fetchone()
 
         if not existing:
-            print(f"❌ FVE panel s ID {panel_id} neexistuje!")
-            return False  
+            if enableLogging:
+                logger.warning(f"❌ FVE panel s ID {panel_id} neexistuje!")
+            return False
 
         cursor.execute("DELETE FROM fvePanels WHERE id = ?", (panel_id,))
         db.commit()
-        print(f"✅ FVE panel s ID {panel_id} byl smazán.")
+
+        if enableLogging:
+            logger.info(f"✅ FVE panel s ID {panel_id} byl smazán.")
 
         cursor.execute("SELECT id FROM fvePanels ORDER BY id ASC")
         panels = cursor.fetchall()
@@ -203,12 +250,16 @@ def deleteFvePanel(panel_id: int):
                 newId += 1
 
             db.commit()
-            print("🔄 ID panelů bylo přepočítáno.")
+            if enableLogging:
+                logger.info("🔄 ID panelů bylo přepočítáno.")
 
-        return True  
+        return True
+
+
+# 📊 Historická data -----------------------------------------------------------
 
 def saveHistoricalData(df: pd.DataFrame):
-    """saveHistoricalData"""
+    """Uloží historická data o spotřebě a výrobě energie"""
     with closing(getDb()) as db:
         cursor = db.cursor()
 
@@ -217,7 +268,6 @@ def saveHistoricalData(df: pd.DataFrame):
         df["fveProduction"] = df["fveProduction"].astype(float).round(2)
         df["consumption"] = df["consumption"].astype(float).round(2)
 
-        # Pokud timestamp ještě není, vytvoříme ho ze sloupců date a hour
         if "timestamp" not in df.columns:
             def to_timestamp(row):
                 base = datetime.datetime.strptime(row["date"], "%Y-%m-%d")
@@ -240,11 +290,12 @@ def saveHistoricalData(df: pd.DataFrame):
         """, data)
 
         db.commit()
-        print("✅ Historická data byla uložena pomocí timestampu.")
+        if enableLogging:
+            logger.info("✅ Historická data byla uložena pomocí timestampu.")
 
 
 def getEnergyData():
-    """getEnergyData"""
+    """Vrátí denní hodnoty spotřeby a výroby"""
     with closing(getDb()) as db:
         cursor = db.cursor()
         cursor.execute("""
@@ -253,14 +304,16 @@ def getEnergyData():
             WHERE time(timestamp) = '23:59:59'
             ORDER BY timestamp ASC
         """)
-
         return [
             {"timestamp": row["timestamp"], "production": row["fveProduction"], "consumption": row["consumption"]}
             for row in cursor.fetchall()
         ]
 
+
+# ⚙️ Obecné nastavení (tabulka settings) ----------------------------------------
+
 def getSettings():
-    """Získá všechna nastavení z databáze."""
+    """Získá všechna nastavení z databáze"""
     with closing(getDb()) as db:
         cursor = db.cursor()
         cursor.execute("SELECT id, paramName, value FROM settings")
@@ -271,15 +324,19 @@ def getSettings():
             for row in settings
         ]
 
+
 def updateSetting(setting_id: int, new_value: str):
-    """Aktualizuje hodnotu parametru v databázi."""
+    """Aktualizuje hodnotu parametru"""
     with closing(getDb()) as db, db:
         cursor = db.cursor()
         cursor.execute("UPDATE settings SET value = ? WHERE id = ?", (new_value, setting_id))
         db.commit()
-        print(f"✅ Nastavení ID {setting_id} bylo aktualizováno na hodnotu {new_value}.")
+        if enableLogging:
+            logger.info(f"✅ Nastavení ID {setting_id} bylo aktualizováno na hodnotu {new_value}.")
 
-def getSetting(paramName):
+
+def getSetting(paramName: str):
+    """Vrátí konkrétní hodnotu nastavení podle názvu"""
     with closing(getDb()) as db:
         cursor = db.cursor()
         cursor.execute("SELECT value FROM settings WHERE paramName = ?", (paramName,))
@@ -287,8 +344,10 @@ def getSetting(paramName):
         return result["value"] if result else None
 
 
+# ⚡ Ceny energie & baterie -----------------------------------------------------
 
 def getTomorrowPrices():
+    """Vrátí ceny energie na zítřejší den"""
     tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).date().isoformat()
     with closing(getDb()) as db:
         cursor = db.cursor()
@@ -301,7 +360,8 @@ def getTomorrowPrices():
         return cursor.fetchall()
 
 
-def insertBatteryPlan(timestamp, action, powerTargetKw):
+def insertBatteryPlan(timestamp: str, action: str, powerTargetKw: float):
+    """Vloží záznam o plánu baterie"""
     with closing(getDb()) as db:
         cursor = db.cursor()
         cursor.execute("""
@@ -309,6 +369,9 @@ def insertBatteryPlan(timestamp, action, powerTargetKw):
             VALUES (?, ?, ?)
         """, (timestamp, action, powerTargetKw))
         db.commit()
+
+
+# 🚀 Vytvoření databáze při spuštění --------------------------------------------
 
 if __name__ == "__main__":
     createDatabase()
