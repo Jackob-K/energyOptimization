@@ -1,29 +1,30 @@
+"""
+Program pro predikci výroby fotovoltaických panelů na základě počasí.
+
+Vstup: Informace o FVE panelech z databáze, předpověď počasí z open-meteo API.
+Výstup: Predikovaná výroba energie uložená v databázi.
+Spolupracuje s: backend.database, open-meteo.com, pvlib.
+"""
+
 import requests
 import pvlib
 import datetime
 import numpy as np
+import logging
+from collections import defaultdict
 from database import getDb
 
-"""
-Tento program slouží k predikci výroby elektrické energie z fotovoltaických panelů (FVE).
-Vstupy:
-  - Parametry FVE panelů uložené v databázi (souřadnice, výkon, sklon, azimut).
-  - Meteorologická předpověď (teplota, solární radiace) získaná z Open-Meteo API.
-
-Výstupy:
-  - Aktualizované hodnoty predikované výroby elektřiny v tabulce `energyData` pro následujících 24 hodin.
-  - Celková denní predikce výroby elektřiny (záznam s `hour = 24`).
-
-Spolupráce:
-  - Spolupracuje s databází SQLite (tabulky `fvePanels`, `energyData`).
-  - Využívá API Open-Meteo pro získání předpovědi počasí.
-  - Používá knihovnu `pvlib` k výpočtu výroby FVE.
-"""
+# 🛠️ Logging
+enableLogging = 1
+logger = logging.getLogger(__name__)
+if enableLogging:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-# Načtení parametrů FVE panelů z databáze
+# ☀️ FVE panely -----------------------------------------------------------------
+
 def getFvePanels():
-    """Načte parametry všech FVE panelů z databáze."""
+    """Načte FVE panely z databáze"""
     with getDb() as db:
         cursor = db.cursor()
         cursor.execute("SELECT id, latitude, longitude, tilt, azimuth, power FROM fvePanels")
@@ -42,80 +43,81 @@ def getFvePanels():
     ]
 
 
-# 🔄 Konverze azimutu pro Open-Meteo
+# 🌤️ Práce s předpovědí počasí --------------------------------------------------
+
 def convertAzimuthForOpenMeteo(azimuth):
-    """Převede azimut z klasického systému (0° = Sever, 180° = Jih) na Open-Meteo (-90° = Východ, 0° = Jih, 90° = Západ)."""
-    return azimuth - 180  # Posuneme systém, aby 0° byl Jih
+    """Konverze azimutu podle požadavku API"""
+    return azimuth - 180
 
 
-# ☁️ Získání předpovědi počasí
 def getWeatherForecast(lat, lon, tilt, azimuth):
-    """Načte hodinovou předpověď počasí pro danou lokalitu a vrátí hodnoty pro zítřek."""
-    
-    correctedAzimuth = convertAzimuthForOpenMeteo(azimuth)  # ✅ Oprava azimutu
-
+    """Stáhne hodinovou předpověď počasí pro danou lokaci"""
+    correctedAzimuth = convertAzimuthForOpenMeteo(azimuth)
     url = (
         f"https://api.open-meteo.com/v1/forecast?"
         f"latitude={lat}&longitude={lon}"
         f"&hourly=temperature_2m,shortwave_radiation"
         f"&models=icon_seamless"
-        f"&tilt={tilt}&azimuth={correctedAzimuth}"  # ✅ Použijeme opravený azimut
+        f"&tilt={tilt}&azimuth={correctedAzimuth}"
         f"&timezone=Europe/Prague"
     )
 
     response = requests.get(url)
-    
     if response.status_code == 200:
         data = response.json()
-
-        # ✅ Bereme jen prvních 24 hodin (zítřek)
-        times = data["hourly"]["time"][:24]
-        temperatures = data["hourly"]["temperature_2m"][:24]
-        solarRadiation = data["hourly"]["shortwave_radiation"][:24]
-
-        print(f"✅ Načteno {len(times)} hodinových hodnot s opraveným azimutem {correctedAzimuth}°.")
-
+        if enableLogging:
+            logger.info(f"✅ Načteno {len(data['hourly']['time'])} hodinových hodnot s azimutem {correctedAzimuth}°.")
         return {
-            "time": times,
-            "temperature": temperatures,
-            "solarRadiation": solarRadiation
+            "time": data["hourly"]["time"],
+            "temperature": data["hourly"]["temperature_2m"],
+            "solarRadiation": data["hourly"]["shortwave_radiation"]
         }
-    
     else:
-        print(f"⚠ Chyba při načítání předpovědi: {response.status_code}")
-        print(f"🛠 Detaily chyby: {response.text}")
+        if enableLogging:
+            logger.error(f"❌ Chyba při načítání počasí: {response.status_code}")
+            logger.error(f"🛠 Detaily: {response.text}")
         return None
 
 
-# ⚡ Výpočet výroby pomocí pvlib
+def splitWeatherByDate(weather):
+    """Rozdělí počasí podle data (YYYY-MM-DD)"""
+    result = defaultdict(lambda: {"time": [], "temperature": [], "solarRadiation": []})
+    for i, t in enumerate(weather["time"]):
+        day = t.split("T")[0]
+        result[day]["time"].append(t)
+        result[day]["temperature"].append(weather["temperature"][i])
+        result[day]["solarRadiation"].append(weather["solarRadiation"][i])
+    return result
+
+
+# ⚡ Výpočet výroby -----------------------------------------------------------------
+
 def calculateProduction(panel, weather):
-    """Vypočítá hodinovou výrobu FVE pomocí knihovny pvlib na základě solární radiace."""
+    """Spočítá očekávanou výrobu na základě počasí a sklonu panelu"""
     times = [datetime.datetime.fromisoformat(t) for t in weather["time"]]
-    
-    location = pvlib.location.Location(
-        latitude=panel["latitude"], 
-        longitude=panel["longitude"]
-    )
-    
+    location = pvlib.location.Location(panel["latitude"], panel["longitude"])
     solarPosition = location.get_solarposition(times)
     poaIrrad = weather["solarRadiation"]
 
-    panelPower = panel["power"]
-    tilt = panel["tilt"]
-    azimuth = panel["azimuth"]
-
-    # Korekce podle úhlu dopadu světla (předběžná metoda)
-    effectiveIrrad = poaIrrad * np.cos(np.radians(solarPosition["zenith"] - tilt))
-
-    # Výstupní výkon, zaokrouhlený na dvě desetinná místa
-    production = np.round((effectiveIrrad / 1000) * panelPower, 2)  # Přepočet na kW
-    
+    effectiveIrrad = poaIrrad * np.cos(np.radians(solarPosition["zenith"] - panel["tilt"]))
+    production = np.round((effectiveIrrad / 1000) * panel["power"], 2)
     return production
 
 
-# 📊 Uložení predikovaných hodnot do databáze
+# 💾 Práce s databází ------------------------------------------------------------
+
+def isPredictionAvailableFor(date):
+    """Zjistí, zda je v DB už uložena predikce pro daný den"""
+    start = datetime.datetime.combine(date, datetime.time(0)).isoformat()
+    with getDb() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT fvePredicted FROM energyData WHERE timestamp = ?", (start,))
+        row = cursor.fetchone()
+        return row is not None and row["fvePredicted"] is not None
+
+
 def savePredictions(baseDate, hourlyProduction):
-    """Uloží predikovanou výrobu FVE do databáze pro jednotlivé hodiny i celkový denní součet."""
+    """Uloží hodinové i denní predikce do databáze"""
     with getDb() as db:
         cursor = db.cursor()
 
@@ -123,7 +125,6 @@ def savePredictions(baseDate, hourlyProduction):
             timestamp = datetime.datetime.combine(baseDate, datetime.time(hour)).isoformat()
             totalProduction = sum(max(0, prod.iloc[hour]) for prod in hourlyProduction)
             totalProduction = round(totalProduction, 2)
-
             cursor.execute("""
                 INSERT INTO energyData (timestamp, fvePredicted)
                 VALUES (?, ?)
@@ -131,11 +132,9 @@ def savePredictions(baseDate, hourlyProduction):
                     fvePredicted = excluded.fvePredicted;
             """, (timestamp, totalProduction))
 
-        # Záznam pro celý den (23:59:59)
         end_of_day = datetime.datetime.combine(baseDate, datetime.time(23, 59, 59)).isoformat()
-        dailyTotal = sum(sum(max(0, p) for p in prod) for prod in hourlyProduction)
+        dailyTotal = sum(sum(max(0, p) for p in prod.tolist()) for prod in hourlyProduction)
         dailyTotal = round(dailyTotal, 2)
-
         cursor.execute("""
             INSERT INTO energyData (timestamp, fvePredicted)
             VALUES (?, ?)
@@ -144,33 +143,78 @@ def savePredictions(baseDate, hourlyProduction):
         """, (end_of_day, dailyTotal))
 
         db.commit()
+        if enableLogging:
+            logger.info(f"💾 Predikce pro {baseDate} byla uložena.")
 
 
+# 🚀 Hlavní funkce ---------------------------------------------------------------
 
-# 🚀 Hlavní spouštěcí funkce
 def main():
-    print("🔄 Spouštím predikci výroby FVE...")
+    if enableLogging:
+        logger.info("🔄 Spouštím predikci výroby FVE...")
 
-    # Zítřejší den jako `date` objekt
-    tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+    today = datetime.date.today()
+    tomorrow = today + datetime.timedelta(days=1)
 
     panels = getFvePanels()
-    allHourlyProductions = []
+    weather_cache = {}
+
+    hourlyProductionsToday = []
+    hourlyProductionsTomorrow = []
 
     for panel in panels:
-        weather = getWeatherForecast(
-            panel["latitude"], panel["longitude"],
-            panel["tilt"], panel["azimuth"]
-        )
-        if weather:
-            hourly = calculateProduction(panel, weather)
-            allHourlyProductions.append(hourly)
+        key = (panel["latitude"], panel["longitude"], panel["tilt"], panel["azimuth"])
+        weather = weather_cache.get(key)
 
-    if allHourlyProductions:
-        savePredictions(tomorrow, allHourlyProductions)
+        if not weather:
+            weather = getWeatherForecast(*key)
+            weather_cache[key] = weather
 
-    print("✅ Predikce výroby dokončena!")
+        if not weather:
+            continue
 
+        split = splitWeatherByDate(weather)
+
+        # Dnešek
+        if str(today) in split:
+            productionToday = calculateProduction(panel, split[str(today)])
+            if len(productionToday) == 24:
+                hourlyProductionsToday.append(productionToday)
+            else:
+                if enableLogging:
+                    logger.warning(f"⚠️ Nedostatek dat pro dnešek – {len(productionToday)} hodin")
+
+        # Zítřek
+        if str(tomorrow) in split:
+            productionTomorrow = calculateProduction(panel, split[str(tomorrow)])
+            if len(productionTomorrow) == 24:
+                hourlyProductionsTomorrow.append(productionTomorrow)
+            else:
+                if enableLogging:
+                    logger.warning(f"⚠️ Nedostatek dat pro zítřek – {len(productionTomorrow)} hodin")
+
+    if not isPredictionAvailableFor(today):
+        if hourlyProductionsToday:
+            if enableLogging:
+                logger.info("📉 Chybí predikce pro dnešek. Ukládám...")
+            savePredictions(today, hourlyProductionsToday)
+        else:
+            if enableLogging:
+                logger.warning("❌ Dnešní data nejsou k dispozici.")
+    else:
+        if enableLogging:
+            logger.info("✅ Dnešní predikce je již v databázi.")
+
+    if hourlyProductionsTomorrow:
+        if enableLogging:
+            logger.info("📆 Ukládám predikci na zítřek...")
+        savePredictions(tomorrow, hourlyProductionsTomorrow)
+    else:
+        if enableLogging:
+            logger.warning("❌ Zítřejší data nejsou k dispozici.")
+
+    if enableLogging:
+        logger.info("✅ Predikce výroby dokončena!")
 
 
 if __name__ == "__main__":

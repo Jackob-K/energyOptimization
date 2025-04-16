@@ -33,7 +33,7 @@ class FveFieldState(rx.State):
         }
         self.set_fveFields(self.fveFields + [new_field])
 
-    def remove_field(self, index: int):
+    def removeField(self, index: int):
         """Odstraní pole FVE z UI a z databáze, pokud má ID."""
         if len(self.fveFields) > 1:
             panel_id = self.fveFields[index].get("id")
@@ -145,7 +145,7 @@ def fveFieldsForm() -> rx.Component:
                     rx.box(
                         rx.cond(
                             FveFieldState.fveFields.length() > 1,
-                            rx.button("Odstranit pole", on_click=lambda idx=index: FveFieldState.remove_field(idx),
+                            rx.button("Odstranit pole", on_click=lambda idx=index: FveFieldState.removeField(idx),
                                       style={"background": "red", "color": "white"})
                         ),
                         margin_top="10px",

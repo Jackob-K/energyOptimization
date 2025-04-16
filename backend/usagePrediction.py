@@ -14,7 +14,7 @@ from database import getDb
 
 from datetime import datetime
 
-def loadModel(modelPath="Models/xgboostModel.pkl"):
+def loadModel(modelPath="backend/Models/xgboostModel.pkl"):
     return joblib.load(modelPath)
 
 def getProcessedData():

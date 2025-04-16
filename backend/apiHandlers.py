@@ -171,6 +171,11 @@ async def getSettings():
     """Vrátí všechna uložená FVE data"""
     return database.getFveData()
 
+@router.delete("/delete-fve/{panel_id}")
+def delete_fve(panel_id: int):
+    return database.deleteFvePanel(panel_id)
+
+
 
 # 📡 MQTT NASTAVENÍ --------------------------------------------------------------
 

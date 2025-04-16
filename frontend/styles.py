@@ -134,7 +134,7 @@ baseStyle = {
 pageIcons = {
     "Dashboard": "layout-dashboard",
     "Settings": "settings",
-    "DataFeed": "rss",
+    "Datafeed": "rss",
     # můžeš přidat další podle potřeby
 }
 

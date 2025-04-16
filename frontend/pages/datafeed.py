@@ -154,7 +154,7 @@ class MQTTSettingsState(rx.State):
 
 @template(
     route="/datafeed",
-    title="DataFeed",
+    title="Datafeed",
     description="Stránka pro nahrávání souborů a správu MQTT."
 )
 def page() -> rx.Component:
